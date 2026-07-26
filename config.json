@@ -1,0 +1,17 @@
+{
+    "adminChatIds": [ // Put admin chat ids as strings since the cJSON cannot parse int64 types
+        "",
+        ""
+    ],
+    "channels2JoinChatIds": [ // Same as the adminChatIds
+        "",
+        ""
+    ],
+    "channels2JoinUrls": [
+        "",
+        ""
+    ],
+    "privateChannelChatId": "",
+    "donateWalletAddress": ""
+}
+
