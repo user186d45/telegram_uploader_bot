@@ -1,4 +1,6 @@
 {
+    "botApiKey": "",
+    "Password": "",
     "adminChatIds": [ // Put admin chat ids as strings since the cJSON cannot parse int64 types
         "",
         ""
@@ -12,6 +14,15 @@
         ""
     ],
     "privateChannelChatId": "",
-    "donateWalletAddress": ""
+    "donateWalletAddress": "",
+    "Messages": {
+        "startMessage": "",
+        "donateMessage": "",
+        "loginSuccess": "Login succeed, enter files to get their secrets.",
+        "loginCancelled": "Login cancelled, returning to idle state.",
+        "channelJoinMessage": "You must join the required channels before using this bot.",
+        "channelJoinConfirmText": "Confirm membership",
+        "channelJoinSuccessMessage": "You can now use the bot."
+    }
 }
 

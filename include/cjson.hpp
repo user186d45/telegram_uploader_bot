@@ -9,10 +9,10 @@
 class iCjson {
 public:
     iCjson();
+    virtual ~iCjson() = default;
 
     virtual applicationConfig* applicationConfigParse(const char* json) = 0;
 
-protected:
     iLog* l = nullptr;
 
 };

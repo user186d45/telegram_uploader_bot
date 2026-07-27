@@ -5,12 +5,25 @@
 #include <vector>
 #include <string>
 
+struct applicationMessages {
+    const char* startMessage = nullptr;
+    const char* donateMessage = nullptr;
+    const char* loginSuccess = nullptr;
+    const char* loginCancelled = nullptr;
+    const char* channelJoinMessage = nullptr;
+    const char* channelJoinConfirmText = nullptr;
+    const char* channelJoinSuccessMessage = nullptr;
+
+};
+
 struct applicationConfig {
-    std::vector<int64_t>*       adminChatIds = nullptr;
+    const char*                 botApiKey = nullptr;
+    const char*                 password = nullptr;
     std::vector<int64_t>*       channels2JoinChatIds = nullptr;
     std::vector<const char*>*   channels2JoinUrls = nullptr;
     int64_t                     privateChannelChatId = 0;
     const char*                 donateWalletAddress = nullptr;
+    struct applicationMessages* aMessages = nullptr;
 
 };
 

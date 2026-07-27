@@ -9,14 +9,14 @@
 
 class iUserDatabaseSql {
 public:
+    iUserDatabaseSql() = default;
+
     enum userDataRW : uint8_t{
         ALL,
         USER_ID,
         HAS_JOINED,
         CONVERSATION_STATE
     };
-
-    iUserDatabaseSql() = default;
 
     virtual unsigned char createCheckDb() = 0;
     virtual unsigned char writeUserData(enum userDataRW uDataRW) = 0;
@@ -26,11 +26,9 @@ public:
     virtual uint8_t updateUserIfChanged() = 0;
 
     struct userInfo* uInfo = nullptr;
+    iLog* l = nullptr;
 
     virtual ~iUserDatabaseSql() = default;
-
-protected:
-    iLog* l = nullptr;
 
 };
 
@@ -54,27 +52,16 @@ private:
 
 class iUploadDatabaseSql {
 public:
-    enum uploadDataRW : uint8_t{
-        ALL,
-        MESSAGE_ID,
-        SECRET
-    };
-
     iUploadDatabaseSql() = default;
 
     virtual unsigned char createCheckDb() = 0;
-    virtual unsigned char writeUploadData(enum uploadDataRW uDataRW) = 0;
-    virtual unsigned char readUploadData(enum uploadDataRW uDataRW) = 0;
-    virtual unsigned char readUploadById(int64_t messageId) = 0;
-    virtual std::vector<int64_t> readAllMessageIds() = 0;
-    virtual uint8_t updateUploadIfChanged() = 0;
+    virtual unsigned char writeUploadData() = 0;
+    virtual unsigned char readUploadData() = 0;
 
-    struct uploadInfo* uInfo = nullptr;
+    struct uploadInfo* upInfo = nullptr;
+    iLog* l = nullptr;
 
     virtual ~iUploadDatabaseSql() = default;
-
-protected:
-    iLog* l = nullptr;
 
 };
 
@@ -83,11 +70,8 @@ public:
     uploadDatabaseSql() = default;
 
     unsigned char createCheckDb() override;
-    unsigned char writeUploadData(enum uploadDataRW uDataRW) override;
-    unsigned char readUploadData(enum uploadDataRW uDataRW) override;
-    unsigned char readUploadById(int64_t messageId) override;
-    std::vector<int64_t> readAllMessageIds() override;
-    uint8_t updateUploadIfChanged() override;
+    unsigned char writeUploadData() override;
+    unsigned char readUploadData() override;
 
     ~uploadDatabaseSql();
 
