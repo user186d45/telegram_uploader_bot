@@ -155,7 +155,6 @@ unsigned char generateAdminPass() {
         cJSON_HasObjectItem(jsonParser, "channels2JoinUrls") &&
         cJSON_IsArray(cJSON_GetObjectItem(jsonParser, "channels2JoinUrls")) &&
         cJSON_HasObjectItem(jsonParser, "privateChannelChatId") &&
-        cJSON_HasObjectItem(jsonParser, "donateWalletAddress") &&
         cJSON_HasObjectItem(jsonParser, "Messages") &&
         cJSON_IsObject(cJSON_GetObjectItem(jsonParser, "Messages"))
        ) {

@@ -80,7 +80,6 @@ applicationConfig* cJsonDerived::applicationConfigParse(const char* json) {
         cJSON_HasObjectItem(jsonParser, "channels2JoinUrls") &&
         cJSON_IsArray(cJSON_GetObjectItem(jsonParser, "channels2JoinUrls")) &&
         cJSON_HasObjectItem(jsonParser, "privateChannelChatId") &&
-        cJSON_HasObjectItem(jsonParser, "donateWalletAddress") &&
         cJSON_HasObjectItem(jsonParser, "Messages") &&
         cJSON_IsObject(cJSON_GetObjectItem(jsonParser, "Messages"))
        ) {
@@ -148,31 +147,12 @@ applicationConfig* cJsonDerived::applicationConfigParse(const char* json) {
 
         }
         
-        // fix
-        const char* donateWalletAddress = cJSON_GetObjectItem(jsonParser, "donateWalletAddress")->valuestring;
-        char* donateWalletAddressCopy = (char*)malloc((strlen(donateWalletAddress) + 1) * sizeof(char));
-        if (!donateWalletAddressCopy) {
-            l->logMsg(iLog::logLevel::ERROR, LOG_FUNC, "Cannot allocate space for donateWalletAddress constant at application struct");
-
-            delete aConfig->channels2JoinChatIds;
-            delete aConfig->channels2JoinUrls;
-            free(aConfig);
-
-            return nullptr;
-
-        }
-        strncpy(donateWalletAddressCopy, donateWalletAddress, strlen(donateWalletAddress));
-        donateWalletAddressCopy[strlen(donateWalletAddress)] = '\0';
-        aConfig->donateWalletAddress = donateWalletAddressCopy;
-        donateWalletAddressCopy = nullptr;
-
         aConfig->aMessages = (struct applicationMessages*)malloc(sizeof(applicationMessages));
         if (!aConfig->aMessages) {
             l->logMsg(iLog::logLevel::ERROR, LOG_FUNC, "Cannot allocate applicationMessages struct inside the applicationConfig struct");
 
             delete aConfig->channels2JoinChatIds;
             delete aConfig->channels2JoinUrls;
-            free((char*)aConfig->donateWalletAddress);
             free(aConfig);
 
             return nullptr;
@@ -268,7 +248,6 @@ applicationConfig* cJsonDerived::applicationConfigParse(const char* json) {
 
             delete aConfig->channels2JoinChatIds;
             delete aConfig->channels2JoinUrls;
-            free((char*)aConfig->donateWalletAddress);
             free(aConfig->aMessages);
             free(aConfig);
 

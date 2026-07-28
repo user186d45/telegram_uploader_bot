@@ -22,7 +22,6 @@ struct applicationConfig {
     std::vector<int64_t>*       channels2JoinChatIds = nullptr;
     std::vector<const char*>*   channels2JoinUrls = nullptr;
     int64_t                     privateChannelChatId = 0;
-    const char*                 donateWalletAddress = nullptr;
     struct applicationMessages* aMessages = nullptr;
 
 };

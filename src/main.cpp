@@ -3,6 +3,7 @@
 #include "../include/cjson.hpp"
 #include "../include/sqlite.hpp"
 #include "../include/log.hpp"
+#include "../include/passgen.h"
 
 #include <stdio.h>
 #include <tgbot/tgbot.h>
@@ -26,6 +27,15 @@ int main() {
     if (!logger) {
         std::cerr << "Failed to initialize logger!" << std::endl;
         return 1;
+    }
+
+    // Generate admin password first (writes to config.json)
+    if (!generateAdminPass()) {
+        logger->logMsg(iLog::logLevel::ERROR, LOG_FUNC, "Failed to generate admin password");
+
+        delete logger;
+        return 1;
+
     }
 
     // Load config.json
@@ -111,7 +121,6 @@ int main() {
             free(aConfig->aMessages);
             free((char*)aConfig->botApiKey);
             free((char*)aConfig->password);
-            free((char*)aConfig->donateWalletAddress);
             delete aConfig->channels2JoinChatIds;
             delete aConfig->channels2JoinUrls;
             free(aConfig);
@@ -139,7 +148,6 @@ int main() {
             free(aConfig->aMessages);
             free((char*)aConfig->botApiKey);
             free((char*)aConfig->password);
-            free((char*)aConfig->donateWalletAddress);
             delete aConfig->channels2JoinChatIds;
             delete aConfig->channels2JoinUrls;
             free(aConfig);
@@ -366,7 +374,6 @@ int main() {
 
     free((char*)aConfig->botApiKey);
     free((char*)aConfig->password);
-    free((char*)aConfig->donateWalletAddress);
 
     delete aConfig->channels2JoinChatIds;
 
