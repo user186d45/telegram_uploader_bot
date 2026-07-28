@@ -13,16 +13,25 @@ struct applicationMessages {
     const char* channelJoinMessage = nullptr;
     const char* channelJoinConfirmText = nullptr;
     const char* channelJoinSuccessMessage = nullptr;
+    const char* messageDeleted = nullptr;
+
+};
+
+struct botInfo {
+    const char* botName = nullptr;
+    const char* databasePath = nullptr;
 
 };
 
 struct applicationConfig {
     const char*                 botApiKey = nullptr;
     const char*                 password = nullptr;
+    std::vector<const char*>*   adminChatIds = nullptr;
     std::vector<int64_t>*       channels2JoinChatIds = nullptr;
     std::vector<const char*>*   channels2JoinUrls = nullptr;
     int64_t                     privateChannelChatId = 0;
     struct applicationMessages* aMessages = nullptr;
+    std::vector<struct botInfo>* botDatabases = nullptr;
 
 };
 

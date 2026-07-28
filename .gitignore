@@ -73,6 +73,8 @@ Thumbs.db
 
 vNum-tgbot.rep
 .cache
+.codegraph
 
 config.json
-
+Pass.txt
+telegram_uploader_bot

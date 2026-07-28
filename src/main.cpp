@@ -104,64 +104,99 @@ int main() {
 
     // Initialize databases
     logger->logMsg(iLog::logLevel::INFO, LOG_FUNC, "Initializing databases...");
-    {
-        iUserDatabaseSql* iUserDbSql = new userDatabaseSql();
-        iUserDbSql->l = logger;
-        if (iUserDbSql->createCheckDb()) {
-            logger->logMsg(iLog::logLevel::ERROR, LOG_FUNC, "Failed to create/check user database");
-
-            delete iUserDbSql;
-            free((char*)aConfig->aMessages->startMessage);
-            free((char*)aConfig->aMessages->donateMessage);
-            free((char*)aConfig->aMessages->loginSuccess);
-            free((char*)aConfig->aMessages->loginCancelled);
-            free((char*)aConfig->aMessages->channelJoinMessage);
-            free((char*)aConfig->aMessages->channelJoinConfirmText);
-            free((char*)aConfig->aMessages->channelJoinSuccessMessage);
-            free(aConfig->aMessages);
-            free((char*)aConfig->botApiKey);
-            free((char*)aConfig->password);
-            delete aConfig->channels2JoinChatIds;
-            delete aConfig->channels2JoinUrls;
-            free(aConfig);
-            delete logger;
-
-            return 1;
-
-        }
+    iUserDatabaseSql* iUserDbSql = new userDatabaseSql();
+    iUserDbSql->l = logger;
+    if (iUserDbSql->createCheckDb()) {
+        logger->logMsg(iLog::logLevel::ERROR, LOG_FUNC, "Failed to create/check user database");
 
         delete iUserDbSql;
+        free((char*)aConfig->aMessages->startMessage);
+        free((char*)aConfig->aMessages->donateMessage);
+        free((char*)aConfig->aMessages->loginSuccess);
+        free((char*)aConfig->aMessages->loginCancelled);
+        free((char*)aConfig->aMessages->channelJoinMessage);
+        free((char*)aConfig->aMessages->channelJoinConfirmText);
+        free((char*)aConfig->aMessages->channelJoinSuccessMessage);
+        free((char*)aConfig->aMessages->messageDeleted);
+        free(aConfig->aMessages);
+        free((char*)aConfig->botApiKey);
+        free((char*)aConfig->password);
+        delete aConfig->channels2JoinChatIds;
+        for (size_t i = 0; i < aConfig->channels2JoinUrls->size(); i++) {
+            free((char*)aConfig->channels2JoinUrls->at(i));
+        }
+        delete aConfig->channels2JoinUrls;
+        if (aConfig->adminChatIds) {
+            for (size_t i = 0; i < aConfig->adminChatIds->size(); i++) {
+                free((char*)aConfig->adminChatIds->at(i));
+            }
+            delete aConfig->adminChatIds;
+        }
+        if (aConfig->botDatabases) {
+            for (size_t i = 0; i < aConfig->botDatabases->size(); i++) {
+                free((char*)aConfig->botDatabases->at(i).botName);
+                free((char*)aConfig->botDatabases->at(i).databasePath);
 
-        iUploadDatabaseSql* iUploadDbSql = new uploadDatabaseSql();
-        iUploadDbSql->l = logger;
-        if (iUploadDbSql->createCheckDb()) {
-            logger->logMsg(iLog::logLevel::ERROR, LOG_FUNC, "Failed to create/check upload database");
-
-            delete iUploadDbSql;
-            free((char*)aConfig->aMessages->startMessage);
-            free((char*)aConfig->aMessages->donateMessage);
-            free((char*)aConfig->aMessages->loginSuccess);
-            free((char*)aConfig->aMessages->loginCancelled);
-            free((char*)aConfig->aMessages->channelJoinMessage);
-            free((char*)aConfig->aMessages->channelJoinConfirmText);
-            free((char*)aConfig->aMessages->channelJoinSuccessMessage);
-            free(aConfig->aMessages);
-            free((char*)aConfig->botApiKey);
-            free((char*)aConfig->password);
-            delete aConfig->channels2JoinChatIds;
-            delete aConfig->channels2JoinUrls;
-            free(aConfig);
-            delete logger;
-
-            return 1;
+            }
+            delete aConfig->botDatabases;
 
         }
+        free(aConfig);
+        delete logger;
 
-        delete iUploadDbSql;
-
-        logger->logMsg(iLog::logLevel::INFO, LOG_FUNC, "Databases initialized successfully");
+        return 1;
 
     }
+
+    iUploadDatabaseSql* iUploadDbSql = new uploadDatabaseSql();
+    iUploadDbSql->l = logger;
+    if (iUploadDbSql->createCheckDb()) {
+        logger->logMsg(iLog::logLevel::ERROR, LOG_FUNC, "Failed to create/check upload database");
+
+        delete iUploadDbSql;
+        delete iUserDbSql;
+        free((char*)aConfig->aMessages->startMessage);
+        free((char*)aConfig->aMessages->donateMessage);
+        free((char*)aConfig->aMessages->loginSuccess);
+        free((char*)aConfig->aMessages->loginCancelled);
+        free((char*)aConfig->aMessages->channelJoinMessage);
+        free((char*)aConfig->aMessages->channelJoinConfirmText);
+        free((char*)aConfig->aMessages->channelJoinSuccessMessage);
+        free((char*)aConfig->aMessages->messageDeleted);
+        free(aConfig->aMessages);
+        free((char*)aConfig->botApiKey);
+        free((char*)aConfig->password);
+        delete aConfig->channels2JoinChatIds;
+        for (size_t i = 0; i < aConfig->channels2JoinUrls->size(); i++) {
+            free((char*)aConfig->channels2JoinUrls->at(i));
+        }
+        delete aConfig->channels2JoinUrls;
+        if (aConfig->adminChatIds) {
+            for (size_t i = 0; i < aConfig->adminChatIds->size(); i++) {
+                free((char*)aConfig->adminChatIds->at(i));
+            }
+            delete aConfig->adminChatIds;
+        }
+        if (aConfig->botDatabases) {
+            for (size_t i = 0; i < aConfig->botDatabases->size(); i++) {
+                free((char*)aConfig->botDatabases->at(i).botName);
+                free((char*)aConfig->botDatabases->at(i).databasePath);
+
+            }
+            delete aConfig->botDatabases;
+
+        }
+        free(aConfig);
+        delete logger;
+
+        return 1;
+
+    }
+
+    delete iUploadDbSql;
+    delete iUserDbSql;
+
+    logger->logMsg(iLog::logLevel::INFO, LOG_FUNC, "Databases initialized successfully");
 
     // Initialize TgBot
     logger->logMsg(iLog::logLevel::INFO, LOG_FUNC, "Bot initialization started");
@@ -221,6 +256,12 @@ int main() {
     joinConfirmIKHandler.aConfig = aConfig;
     joinConfirmIKHandler.l = logger;
 
+    checkBotDbHandler checkBotDbHandler;
+    checkBotDbHandler.bot = &bot;
+    checkBotDbHandler.uInfo = &uInfo;
+    checkBotDbHandler.aConfig = aConfig;
+    checkBotDbHandler.l = logger;
+
     logger->logMsg(iLog::logLevel::INFO, LOG_FUNC, "All handlers initialized");
 
     // Set up bot event handlers
@@ -232,21 +273,12 @@ int main() {
 
     // Message handler for all messages
     bot.getEvents().onAnyMessage([&](TgBot::Message::Ptr message) {
-        // Sync uInfo with the current message sender before dispatching
-        if (message->from && message->from->id != uInfo.userId) {
-            uInfo = userInfo{};
-            uInfo.userId = message->from->id;
-            uInfo.cState = conversationState::IDLE;
-
-            iUserDatabaseSql* sqlLocal = new userDatabaseSql();
-            sqlLocal->l = logger;
-            sqlLocal->uInfo = &uInfo;
-            sqlLocal->createCheckDb();
-            sqlLocal->readUserById(message->from->id);
-            delete(sqlLocal);
-        }
-
         try {
+            // Skip /start — already handled by onCommand, prevents admin login toggle
+            if (!message->text.empty() && strncmp(message->text.c_str(), "/start", 6) == 0) {
+                return;
+            }
+
             // Channel join check (blocks if not joined)
             if (channelJoinHandler.canHandle(message)) {
                 channelJoinHandler.handle(message);
@@ -285,23 +317,16 @@ int main() {
     bot.getEvents().onCallbackQuery([&](TgBot::CallbackQuery::Ptr callbackQuery) {
         std::cout << "CallbackQuery data: " + callbackQuery->data + "\n";
 
-        // Sync uInfo with the current callback sender before dispatching
-        if (callbackQuery->from && callbackQuery->from->id != uInfo.userId) {
-            uInfo = userInfo{};
-            uInfo.userId = callbackQuery->from->id;
-            uInfo.cState = conversationState::IDLE;
-
-            iUserDatabaseSql* sqlLocal = new userDatabaseSql();
-            sqlLocal->l = logger;
-            sqlLocal->uInfo = &uInfo;
-            sqlLocal->createCheckDb();
-            sqlLocal->readUserById(callbackQuery->from->id);
-            delete(sqlLocal);
-        }
-
         // Join-confirmation callback always goes through for non-joined users
         if (joinConfirmIKHandler.canHandle(callbackQuery)) {
             joinConfirmIKHandler.handle(callbackQuery);
+
+            if (uInfo.hasJoined) {
+                checkBotDbHandler.handleAfterJoinConfirm(
+                    callbackQuery->from->id,
+                    callbackQuery->message->chat->id
+                );
+            }
 
             return;
 
@@ -367,9 +392,11 @@ int main() {
     free((char*)aConfig->aMessages->startMessage);
     free((char*)aConfig->aMessages->donateMessage);
     free((char*)aConfig->aMessages->loginSuccess);
+    free((char*)aConfig->aMessages->loginCancelled);
     free((char*)aConfig->aMessages->channelJoinMessage);
     free((char*)aConfig->aMessages->channelJoinConfirmText);
     free((char*)aConfig->aMessages->channelJoinSuccessMessage);
+    free((char*)aConfig->aMessages->messageDeleted);
     free(aConfig->aMessages);
 
     free((char*)aConfig->botApiKey);
@@ -383,7 +410,36 @@ int main() {
     }
     delete aConfig->channels2JoinUrls;
 
+    if (aConfig->adminChatIds) {
+        for (size_t i = 0; i < aConfig->adminChatIds->size(); i++) {
+            free((char*)aConfig->adminChatIds->at(i));
+
+        }
+        delete aConfig->adminChatIds;
+
+    }
+
+    if (aConfig->botDatabases) {
+        for (size_t i = 0; i < aConfig->botDatabases->size(); i++) {
+            free((char*)aConfig->botDatabases->at(i).botName);
+            free((char*)aConfig->botDatabases->at(i).databasePath);
+
+        }
+        delete aConfig->botDatabases;
+
+    }
+
     free(aConfig);
+
+    // Null out logger pointers before deletion — handlers are stack-allocated
+    // and their iBot destructor will run after main() returns, using a dangling l
+    startCmdHandler.l = nullptr;
+    getPasswordHandler.l = nullptr;
+    getContentHandler.l = nullptr;
+    channelJoinHandler.l = nullptr;
+    donateIKHandler.l = nullptr;
+    joinConfirmIKHandler.l = nullptr;
+    checkBotDbHandler.l = nullptr;
 
     delete logger;
 

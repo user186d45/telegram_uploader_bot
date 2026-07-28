@@ -5,13 +5,19 @@
 #include <cstdio>
 
 void iBot::updateUserInfoFromMessage(TgBot::Message::Ptr messagePtr) {
-    // TODO
-
+    iUserDatabaseSql* sqlLocal = new userDatabaseSql();
+    sqlLocal->l = l;
+    sqlLocal->uInfo = uInfo;
+    sqlLocal->readUserById(messagePtr->from->id);
+    delete sqlLocal;
 }
 
 void iBot::updateUserInfoFromCallback(TgBot::CallbackQuery::Ptr cBQueryPtr) {
-    // TODO
-
+    iUserDatabaseSql* sqlLocal = new userDatabaseSql();
+    sqlLocal->l = l;
+    sqlLocal->uInfo = uInfo;
+    sqlLocal->readUserById(cBQueryPtr->from->id);
+    delete sqlLocal;
 }
 
 unsigned char startCommandHandler::canHandle(TgBot::Message::Ptr messagePtr) {
@@ -22,7 +28,11 @@ unsigned char startCommandHandler::canHandle(TgBot::Message::Ptr messagePtr) {
 void startCommandHandler::handle(TgBot::Message::Ptr messagePtr) {
     updateUserInfoFromMessage(messagePtr);
 
-    iUserDbSql->writeUserData(iUserDatabaseSql::userDataRW::ALL);
+    iUserDatabaseSql* sqlLocal = new userDatabaseSql();
+    sqlLocal->l = l;
+    sqlLocal->uInfo = uInfo;
+    sqlLocal->writeUserData(iUserDatabaseSql::userDataRW::ALL);
+    delete sqlLocal;
 
     TgBot::InlineKeyboardMarkup::Ptr iKeyboardM(new TgBot::InlineKeyboardMarkup);
     
@@ -45,6 +55,34 @@ void startCommandHandler::handle(TgBot::Message::Ptr messagePtr) {
 
     if (strlen(messagePtr->text.c_str()) < 7) {
         return;
+
+    }
+
+    if (aConfig->channels2JoinChatIds) {
+        try {
+            for (size_t i = 0; i < aConfig->channels2JoinChatIds->size(); i++) {
+                TgBot::ChatMember::Ptr chatMemberPtr = bot->getApi().getChatMember(
+                    aConfig->channels2JoinChatIds->at(i),
+                    uInfo->userId
+                );
+
+                bool isMember = strncmp(chatMemberPtr->status.c_str(), "member", 6) == 0 ||
+                                strncmp(chatMemberPtr->status.c_str(), "administrator", 13) == 0 ||
+                                strncmp(chatMemberPtr->status.c_str(), "creator", 7) == 0;
+
+                if (!isMember) {
+                    return;
+
+                }
+
+            }
+
+        } catch (...) {
+            l->logMsg(iLog::logLevel::ERROR, LOG_FUNC, "Channel membership check failed in start handler");
+
+            return;
+
+        }
 
     }
 
@@ -79,11 +117,34 @@ void startCommandHandler::handle(TgBot::Message::Ptr messagePtr) {
 
     }
 
-    forwardMessage(
-            uInfo->userId,
-            aConfig->privateChannelChatId,
-            upInfo.messageId
-    );
+    try {
+        forwardMessage(
+                uInfo->userId,
+                aConfig->privateChannelChatId,
+                upInfo.messageId
+        );
+
+    } catch (...) {
+        if (aConfig->aMessages->messageDeleted && strlen(aConfig->aMessages->messageDeleted) > 0) {
+            try {
+                sendMessage(
+                        uInfo->userId,
+                        aConfig->aMessages->messageDeleted,
+                        nullptr,
+                        nullptr,
+                        nullptr
+                );
+
+            } catch (...) {
+                l->logMsg(iLog::logLevel::ERROR, LOG_FUNC, "Failed to send messageDeleted notification");
+
+            }
+
+        }
+
+    }
+
+    l->logMsg(iLog::logLevel::INFO, LOG_FUNC, "startCommandHandler::handle complete");
 
 }
 
@@ -105,23 +166,49 @@ void donateMsgIKHandler::handle(TgBot::CallbackQuery::Ptr cBQueryPtr) {
             nullptr
     );
 
+    l->logMsg(iLog::logLevel::INFO, LOG_FUNC, "donateMsgIKHandler::handle complete");
+
 }
 
 unsigned char getPasswordMsgHandler::canHandle(TgBot::Message::Ptr messagePtr) {
-    if (!aConfig || !aConfig->password) {
+    if (!aConfig) {
         return 0;
 
     }
 
-    return (strcmp(messagePtr->text.c_str(), aConfig->password) == 0) ? 1 : 0;
+    updateUserInfoFromMessage(messagePtr);
+
+    if (!uInfo || !aConfig->adminChatIds || !aConfig->password) {
+        return 0;
+
+    }
+
+    for (size_t i = 0; i < aConfig->adminChatIds->size(); i++) {
+        if (uInfo->userId == strtoll(aConfig->adminChatIds->at(i), NULL, 10)) {
+            if (strncmp(aConfig->password, messagePtr->text.c_str(), strlen(aConfig->password)) == 0) {
+
+                return 1;
+
+            }
+
+        }
+
+    }
+
+    return 0;
 
 }
 
 void getPasswordMsgHandler::handle(TgBot::Message::Ptr messagePtr) {
+
+    iUserDatabaseSql* sqlLocal = new userDatabaseSql();
+    sqlLocal->l = l;
+    sqlLocal->uInfo = uInfo;
+
     if (uInfo->cState == GET_LINKS) {
         uInfo->cState = IDLE;
 
-        iUserDbSql->writeUserData(iUserDatabaseSql::userDataRW::CONVERSATION_STATE);
+        sqlLocal->writeUserData(iUserDatabaseSql::userDataRW::CONVERSATION_STATE);
 
         sendMessage(
                 uInfo->userId,
@@ -134,7 +221,7 @@ void getPasswordMsgHandler::handle(TgBot::Message::Ptr messagePtr) {
     } else {
         uInfo->cState = GET_LINKS;
 
-        iUserDbSql->writeUserData(iUserDatabaseSql::userDataRW::CONVERSATION_STATE);
+        sqlLocal->writeUserData(iUserDatabaseSql::userDataRW::CONVERSATION_STATE);
 
         sendMessage(
                 uInfo->userId,
@@ -146,6 +233,9 @@ void getPasswordMsgHandler::handle(TgBot::Message::Ptr messagePtr) {
 
     }
 
+    delete sqlLocal;
+
+    l->logMsg(iLog::logLevel::INFO, LOG_FUNC, "getPasswordMsgHandler::handle complete");
 }
 
 unsigned char getContentMsgHandler::canHandle(TgBot::Message::Ptr messagePtr) {
@@ -154,11 +244,14 @@ unsigned char getContentMsgHandler::canHandle(TgBot::Message::Ptr messagePtr) {
 
     }
 
+    updateUserInfoFromMessage(messagePtr);
+
     return (uInfo->cState == GET_LINKS) ? 1 : 0;
 
 }
 
 void getContentMsgHandler::handle(TgBot::Message::Ptr messagePtr) {
+
     iUploadDbSql = new uploadDatabaseSql();
     if (!iUploadDbSql) {
         l->logMsg(iLog::logLevel::ERROR, LOG_FUNC, "Cannot allocate iUploadDbSql");
@@ -192,8 +285,14 @@ void getContentMsgHandler::handle(TgBot::Message::Ptr messagePtr) {
 
     }
 
+    TgBot::Message::Ptr forwardedMsg = forwardMessage(
+            aConfig->privateChannelChatId,
+            uInfo->userId,
+            messagePtr->messageId
+    );
+
     struct uploadInfo upInfo = {
-        .messageId = static_cast<int64_t>(messagePtr->messageId),
+        .messageId = static_cast<int64_t>(forwardedMsg->messageId),
         .secret = secret
     };
 
@@ -202,9 +301,16 @@ void getContentMsgHandler::handle(TgBot::Message::Ptr messagePtr) {
     delete iUploadDbSql;
     iUploadDbSql = nullptr;
 
-    uInfo->cState = IDLE;
+    std::string msgText = "https://t.me/" + bot->getApi().getMe()->username + "?start=" + upInfo.secret;
+    sendMessage(
+            uInfo->userId,
+            msgText,
+            nullptr,
+            nullptr,
+            nullptr
+    );
 
-    iUserDbSql->writeUserData(iUserDatabaseSql::userDataRW::CONVERSATION_STATE);
+    l->logMsg(iLog::logLevel::INFO, LOG_FUNC, "getContentMsgHandler::handle complete");
 
 }
 
@@ -214,6 +320,8 @@ unsigned char channelJoinMsgHandler::canHandle(TgBot::Message::Ptr messagePtr) {
         return 0;
 
     }
+
+    updateUserInfoFromMessage(messagePtr);
 
     if (!aConfig->channels2JoinChatIds) {
 
@@ -236,7 +344,11 @@ unsigned char channelJoinMsgHandler::canHandle(TgBot::Message::Ptr messagePtr) {
                 if (uInfo->hasJoined) {
                     uInfo->hasJoined = 0;
 
-                    iUserDbSql->writeUserData(iUserDatabaseSql::userDataRW::HAS_JOINED);
+                    iUserDatabaseSql* sqlLocal = new userDatabaseSql();
+                    sqlLocal->l = l;
+                    sqlLocal->uInfo = uInfo;
+                    sqlLocal->writeUserData(iUserDatabaseSql::userDataRW::HAS_JOINED);
+                    delete sqlLocal;
 
                 }
 
@@ -249,7 +361,11 @@ unsigned char channelJoinMsgHandler::canHandle(TgBot::Message::Ptr messagePtr) {
         if (!uInfo->hasJoined) {
             uInfo->hasJoined = 1;
 
-            iUserDbSql->writeUserData(iUserDatabaseSql::userDataRW::HAS_JOINED);
+            iUserDatabaseSql* sqlLocal = new userDatabaseSql();
+            sqlLocal->l = l;
+            sqlLocal->uInfo = uInfo;
+            sqlLocal->writeUserData(iUserDatabaseSql::userDataRW::HAS_JOINED);
+            delete sqlLocal;
 
         }
 
@@ -319,6 +435,8 @@ void channelJoinMsgHandler::handle(TgBot::Message::Ptr messagePtr) {
 
     }
 
+    l->logMsg(iLog::logLevel::INFO, LOG_FUNC, "channelJoinMsgHandler::handle complete");
+
 }
 
 unsigned char joinConfirmIKHandler::canHandle(TgBot::CallbackQuery::Ptr cBQueryPtr) {
@@ -364,23 +482,23 @@ void joinConfirmIKHandler::handle(TgBot::CallbackQuery::Ptr cBQueryPtr) {
             if (!uInfo->hasJoined) {
                 uInfo->hasJoined = 1;
 
-                iUserDbSql->writeUserData(iUserDatabaseSql::userDataRW::HAS_JOINED);
+                iUserDatabaseSql* sqlLocal = new userDatabaseSql();
+                sqlLocal->l = l;
+                sqlLocal->uInfo = uInfo;
+                sqlLocal->writeUserData(iUserDatabaseSql::userDataRW::HAS_JOINED);
+                delete sqlLocal;
 
             }
-
-            sendMessage(
-                    uInfo->userId,
-                    aConfig->aMessages->channelJoinSuccessMessage,
-                    nullptr,
-                    nullptr,
-                    nullptr
-            );
 
         } else {
             if (uInfo->hasJoined) {
                 uInfo->hasJoined = 0;
 
-                iUserDbSql->writeUserData(iUserDatabaseSql::userDataRW::HAS_JOINED);
+                iUserDatabaseSql* sqlLocal = new userDatabaseSql();
+                sqlLocal->l = l;
+                sqlLocal->uInfo = uInfo;
+                sqlLocal->writeUserData(iUserDatabaseSql::userDataRW::HAS_JOINED);
+                delete sqlLocal;
 
             }
 
@@ -466,5 +584,87 @@ void joinConfirmIKHandler::handle(TgBot::CallbackQuery::Ptr cBQueryPtr) {
         );
 
     }
+
+    l->logMsg(iLog::logLevel::INFO, LOG_FUNC, "joinConfirmIKHandler::handle complete");
+
+}
+
+unsigned char checkBotDbHandler::isUserInBotDb(const char* databasePath, int64_t userId) {
+    if (!databasePath) {
+        return 0;
+
+    }
+
+    sqlite3* db;
+    if (sqlite3_open(databasePath, &db) != SQLITE_OK) {
+        l->logMsg(iLog::logLevel::ERROR, LOG_FUNC, "Cannot open external bot database");
+
+        return 0;
+
+    }
+
+    const char* sql = "SELECT userId FROM users WHERE userId = ?";
+    sqlite3_stmt* stmt;
+    if (sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr) != SQLITE_OK) {
+        l->logMsg(iLog::logLevel::ERROR, LOG_FUNC, "Cannot prepare statement for external bot database");
+
+        sqlite3_close(db);
+        return 0;
+
+    }
+
+    sqlite3_bind_int64(stmt, 1, userId);
+
+    unsigned char found = (sqlite3_step(stmt) == SQLITE_ROW) ? 1 : 0;
+
+    sqlite3_finalize(stmt);
+    sqlite3_close(db);
+
+    return found;
+
+}
+
+void checkBotDbHandler::handleAfterJoinConfirm(int64_t userId, int64_t chatId) {
+    if (!aConfig || !aConfig->botDatabases) {
+        return;
+
+    }
+
+    std::vector<std::pair<const char*, const char*>> missingBots;
+
+    for (size_t i = 0; i < aConfig->botDatabases->size(); i++) {
+        struct botInfo& info = aConfig->botDatabases->at(i);
+        if (!isUserInBotDb(info.databasePath, userId)) {
+            missingBots.emplace_back(info.botName, info.databasePath);
+
+        }
+
+    }
+
+    TgBot::InlineKeyboardMarkup::Ptr iKeyboardM(new TgBot::InlineKeyboardMarkup);
+
+    for (size_t i = 0; i < missingBots.size(); i++) {
+        std::vector<TgBot::InlineKeyboardButton::Ptr> row;
+
+        TgBot::InlineKeyboardButton::Ptr botBtn(new TgBot::InlineKeyboardButton);
+        std::string btnText = "Start " + std::string(missingBots[i].first);
+        std::string btnUrl = "https://t.me/" + std::string(missingBots[i].first);
+        botBtn->text = btnText;
+        botBtn->url = btnUrl;
+        row.push_back(botBtn);
+
+        iKeyboardM->inlineKeyboard.push_back(row);
+
+    }
+
+    sendMessage(
+            chatId,
+            aConfig->aMessages->channelJoinSuccessMessage,
+            nullptr,
+            nullptr,
+            missingBots.empty() ? nullptr : iKeyboardM
+    );
+
+    l->logMsg(iLog::logLevel::INFO, LOG_FUNC, "checkBotDbHandler::handleAfterJoinConfirm complete");
 
 }

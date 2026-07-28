@@ -56,7 +56,7 @@ userDatabaseSql::~userDatabaseSql() {
 
     }
 
-    l->logMsg(iLog::logLevel::INFO, LOG_FUNC, "Function called");
+    l->logMsg(iLog::logLevel::INFO, LOG_FUNC, "userDatabaseSql destructor called");
 
 }
 
@@ -82,22 +82,18 @@ unsigned char userDatabaseSql::writeUserData(enum userDataRW uDataRW) {
     switch (uDataRW) {
         case userDataRW::ALL:
             insertSql = "INSERT OR REPLACE INTO users (userId, hasJoined, conversationState) VALUES (?, ?, ?);";
-
             break;
 
         case userDataRW::USER_ID:
             insertSql = "UPDATE users SET userId = ? WHERE userId = ?";
-
             break;
 
         case userDataRW::HAS_JOINED:
             insertSql = "UPDATE users SET hasJoined = ? WHERE userId = ?";
-
             break;
 
         case userDataRW::CONVERSATION_STATE:
             insertSql = "UPDATE users SET conversationState = ? WHERE userId = ?";
-
             break;
 
     }
@@ -186,22 +182,18 @@ unsigned char userDatabaseSql::readUserData(enum userDataRW uDataRW) {
     switch (uDataRW) {
         case userDataRW::ALL:
             readSql = "SELECT userId, hasJoined, conversationState FROM users;";
-
             break;
 
         case userDataRW::USER_ID:
             readSql = "SELECT userId FROM users WHERE userId = ?;";
-
             break;
 
         case userDataRW::HAS_JOINED:
             readSql = "SELECT hasJoined FROM users WHERE userId = ?;";
-
             break;
 
         case userDataRW::CONVERSATION_STATE:
             readSql = "SELECT conversationState FROM users WHERE userId = ?;";
-
             break;
 
     }
@@ -654,6 +646,6 @@ uploadDatabaseSql::~uploadDatabaseSql() {
 
     }
 
-    l->logMsg(iLog::logLevel::INFO, LOG_FUNC, "Function called");
+    l->logMsg(iLog::logLevel::INFO, LOG_FUNC, "uploadDatabaseSql destructor called");
 
 }

@@ -5,7 +5,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <malloc.h>
+#include <cstdlib>
 #include <cjson/cJSON.h>
 
 iCjson::iCjson() {
@@ -146,13 +146,26 @@ applicationConfig* cJsonDerived::applicationConfigParse(const char* json) {
             return nullptr;
 
         }
+
+        aConfig->adminChatIds = new std::vector<const char*>();
+        if (!aConfig->adminChatIds) {
+            l->logMsg(iLog::logLevel::ERROR, LOG_FUNC, "Cannot allocate adminChatIds vector inside the applicationConfig struct");
+
+            delete aConfig->channels2JoinChatIds;
+            delete aConfig->channels2JoinUrls;
+            free(aConfig);
+
+            return nullptr;
+
+        }
         
-        aConfig->aMessages = (struct applicationMessages*)malloc(sizeof(applicationMessages));
+        aConfig->aMessages = (struct applicationMessages*)calloc(1, sizeof(applicationMessages));
         if (!aConfig->aMessages) {
             l->logMsg(iLog::logLevel::ERROR, LOG_FUNC, "Cannot allocate applicationMessages struct inside the applicationConfig struct");
 
             delete aConfig->channels2JoinChatIds;
             delete aConfig->channels2JoinUrls;
+            delete aConfig->adminChatIds;
             free(aConfig);
 
             return nullptr;
@@ -175,7 +188,83 @@ applicationConfig* cJsonDerived::applicationConfigParse(const char* json) {
 
         }
 
+        if (cJSON_HasObjectItem(jsonParser, "adminChatIds") &&
+            cJSON_IsArray(cJSON_GetObjectItem(jsonParser, "adminChatIds"))) {
+            cJSON* adminChatIdsArr = cJSON_GetObjectItem(jsonParser, "adminChatIds");
+            for (int i = 0; i < cJSON_GetArraySize(adminChatIdsArr); i++) {
+                const char* id = cJSON_GetArrayItem(adminChatIdsArr, i)->valuestring;
+                char* idCopy = (char*)malloc((strlen(id) + 1) * sizeof(char));
+                strncpy(idCopy, id, strlen(id));
+                idCopy[strlen(id)] = '\0';
+                aConfig->adminChatIds->emplace_back(idCopy);
+
+            }
+
+        }
+
         aConfig->privateChannelChatId = strtoll(cJSON_GetObjectItem(jsonParser, "privateChannelChatId")->valuestring, NULL, 10);
+
+        aConfig->botDatabases = new std::vector<struct botInfo>();
+        if (!aConfig->botDatabases) {
+            l->logMsg(iLog::logLevel::ERROR, LOG_FUNC, "Cannot allocate botDatabases vector inside the applicationConfig struct");
+
+            delete aConfig->channels2JoinChatIds;
+            for (size_t i = 0; i < aConfig->channels2JoinUrls->size(); i++) {
+                free((char*)aConfig->channels2JoinUrls->at(i));
+            }
+            delete aConfig->channels2JoinUrls;
+            for (size_t i = 0; i < aConfig->adminChatIds->size(); i++) {
+                free((char*)aConfig->adminChatIds->at(i));
+            }
+            delete aConfig->adminChatIds;
+            free(aConfig->aMessages);
+            free(aConfig);
+
+            return nullptr;
+
+        }
+
+        if (cJSON_HasObjectItem(jsonParser, "botDatabases") &&
+            cJSON_IsArray(cJSON_GetObjectItem(jsonParser, "botDatabases"))) {
+            cJSON* botDatabasesArr = cJSON_GetObjectItem(jsonParser, "botDatabases");
+            for (int i = 0; i < cJSON_GetArraySize(botDatabasesArr); i++) {
+                cJSON* item = cJSON_GetArrayItem(botDatabasesArr, i);
+                if (!cJSON_HasObjectItem(item, "Name") || !cJSON_HasObjectItem(item, "Path")) {
+                    continue;
+
+                }
+
+                const char* botName = cJSON_GetObjectItem(item, "Name")->valuestring;
+                char* botNameCopy = (char*)malloc((strlen(botName) + 1) * sizeof(char));
+                if (!botNameCopy) {
+                    l->logMsg(iLog::logLevel::ERROR, LOG_FUNC, "Cannot allocate space for botName");
+
+                    continue;
+
+                }
+                strncpy(botNameCopy, botName, strlen(botName));
+                botNameCopy[strlen(botName)] = '\0';
+
+                const char* databasePath = cJSON_GetObjectItem(item, "Path")->valuestring;
+                char* databasePathCopy = (char*)malloc((strlen(databasePath) + 1) * sizeof(char));
+                if (!databasePathCopy) {
+                    l->logMsg(iLog::logLevel::ERROR, LOG_FUNC, "Cannot allocate space for databasePath");
+
+                    free(botNameCopy);
+                    continue;
+
+                }
+                strncpy(databasePathCopy, databasePath, strlen(databasePath));
+                databasePathCopy[strlen(databasePath)] = '\0';
+
+                struct botInfo info;
+                info.botName = botNameCopy;
+                info.databasePath = databasePathCopy;
+                aConfig->botDatabases->emplace_back(info);
+
+            }
+
+        }
 
         cJSON* messageObj = cJSON_GetObjectItem(jsonParser, "Messages");
         if (
@@ -185,7 +274,8 @@ applicationConfig* cJsonDerived::applicationConfigParse(const char* json) {
             cJSON_HasObjectItem(messageObj, "loginCancelled") &&
             cJSON_HasObjectItem(messageObj, "channelJoinMessage") &&
             cJSON_HasObjectItem(messageObj, "channelJoinConfirmText") &&
-            cJSON_HasObjectItem(messageObj, "channelJoinSuccessMessage")
+            cJSON_HasObjectItem(messageObj, "channelJoinSuccessMessage") &&
+            cJSON_HasObjectItem(messageObj, "messageDeleted")
            ) {
             const char* startMessage = cJSON_GetObjectItem(messageObj, "startMessage")->valuestring;
             char* startMessageCopy = (char*)malloc((strlen(startMessage) + 1) * sizeof(char));
@@ -243,12 +333,35 @@ applicationConfig* cJsonDerived::applicationConfigParse(const char* json) {
             aConfig->aMessages->channelJoinSuccessMessage = channelJoinSuccessMessageCopy;
             channelJoinSuccessMessageCopy = nullptr;
 
+            const char* messageDeleted = cJSON_GetObjectItem(messageObj, "messageDeleted")->valuestring;
+            char* messageDeletedCopy = (char*)malloc((strlen(messageDeleted) + 1) * sizeof(char));
+            strncpy(messageDeletedCopy, messageDeleted, strlen(messageDeleted));
+            messageDeletedCopy[strlen(messageDeleted)] = '\0';
+
+            aConfig->aMessages->messageDeleted = messageDeletedCopy;
+            messageDeletedCopy = nullptr;
+
         } else {
             l->logMsg(iLog::logLevel::ERROR, LOG_FUNC, "Required elements are not present in the message object");
 
             delete aConfig->channels2JoinChatIds;
             delete aConfig->channels2JoinUrls;
+            if (aConfig->adminChatIds) {
+                for (size_t i = 0; i < aConfig->adminChatIds->size(); i++) {
+                    free((char*)aConfig->adminChatIds->at(i));
+                }
+                delete aConfig->adminChatIds;
+            }
             free(aConfig->aMessages);
+            if (aConfig->botDatabases) {
+                for (size_t i = 0; i < aConfig->botDatabases->size(); i++) {
+                    free((char*)aConfig->botDatabases->at(i).botName);
+                    free((char*)aConfig->botDatabases->at(i).databasePath);
+
+                }
+                delete aConfig->botDatabases;
+
+            }
             free(aConfig);
 
             cJSON_Delete(jsonParser);
@@ -256,6 +369,56 @@ applicationConfig* cJsonDerived::applicationConfigParse(const char* json) {
             return nullptr;
 
         }
+
+        l->logMsg(iLog::logLevel::INFO, LOG_FUNC, "--- Config parsed successfully ---");
+        l->logMsg(iLog::logLevel::INFO, LOG_FUNC, ("botApiKey: " + std::string(aConfig->botApiKey)).c_str());
+        l->logMsg(iLog::logLevel::INFO, LOG_FUNC, ("password: " + std::string(aConfig->password)).c_str());
+        l->logMsg(iLog::logLevel::INFO, LOG_FUNC, ("privateChannelChatId: " + std::to_string(aConfig->privateChannelChatId)).c_str());
+
+        std::string adminIds;
+        if (aConfig->adminChatIds) {
+            for (size_t i = 0; i < aConfig->adminChatIds->size(); i++) {
+                if (i > 0) adminIds += ", ";
+                adminIds += aConfig->adminChatIds->at(i);
+            }
+        }
+        l->logMsg(iLog::logLevel::INFO, LOG_FUNC, ("adminChatIds: [" + adminIds + "]").c_str());
+
+        std::string channelIds;
+        if (aConfig->channels2JoinChatIds) {
+            for (size_t i = 0; i < aConfig->channels2JoinChatIds->size(); i++) {
+                if (i > 0) channelIds += ", ";
+                channelIds += std::to_string(aConfig->channels2JoinChatIds->at(i));
+            }
+        }
+        l->logMsg(iLog::logLevel::INFO, LOG_FUNC, ("channels2JoinChatIds: [" + channelIds + "]").c_str());
+
+        std::string channelUrls;
+        if (aConfig->channels2JoinUrls) {
+            for (size_t i = 0; i < aConfig->channels2JoinUrls->size(); i++) {
+                if (i > 0) channelUrls += ", ";
+                channelUrls += aConfig->channels2JoinUrls->at(i);
+            }
+        }
+        l->logMsg(iLog::logLevel::INFO, LOG_FUNC, ("channels2JoinUrls: [" + channelUrls + "]").c_str());
+
+        if (aConfig->botDatabases) {
+            for (size_t i = 0; i < aConfig->botDatabases->size(); i++) {
+                l->logMsg(iLog::logLevel::INFO, LOG_FUNC,
+                    ("botDatabase: " + std::string(aConfig->botDatabases->at(i).botName) +
+                     " -> " + std::string(aConfig->botDatabases->at(i).databasePath)).c_str());
+            }
+        }
+
+        l->logMsg(iLog::logLevel::INFO, LOG_FUNC, ("startMessage: " + std::string(aConfig->aMessages->startMessage)).c_str());
+        l->logMsg(iLog::logLevel::INFO, LOG_FUNC, ("donateMessage: " + std::string(aConfig->aMessages->donateMessage)).c_str());
+        l->logMsg(iLog::logLevel::INFO, LOG_FUNC, ("loginSuccess: " + std::string(aConfig->aMessages->loginSuccess)).c_str());
+        l->logMsg(iLog::logLevel::INFO, LOG_FUNC, ("loginCancelled: " + std::string(aConfig->aMessages->loginCancelled)).c_str());
+        l->logMsg(iLog::logLevel::INFO, LOG_FUNC, ("channelJoinMessage: " + std::string(aConfig->aMessages->channelJoinMessage)).c_str());
+        l->logMsg(iLog::logLevel::INFO, LOG_FUNC, ("channelJoinConfirmText: " + std::string(aConfig->aMessages->channelJoinConfirmText)).c_str());
+        l->logMsg(iLog::logLevel::INFO, LOG_FUNC, ("channelJoinSuccessMessage: " + std::string(aConfig->aMessages->channelJoinSuccessMessage)).c_str());
+        l->logMsg(iLog::logLevel::INFO, LOG_FUNC, ("messageDeleted: " + std::string(aConfig->aMessages->messageDeleted)).c_str());
+        l->logMsg(iLog::logLevel::INFO, LOG_FUNC, "--- End of config ---");
 
         cJSON_Delete(jsonParser);
 

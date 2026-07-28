@@ -13,8 +13,16 @@ public:
     iBot() = default;
 
     virtual ~iBot() {
+        if (l) {
+            l->logMsg(iLog::logLevel::INFO, LOG_FUNC, "iBot destructor called");
+        }
+
         delete iUploadDbSql;
         delete iUserDbSql;
+
+        if (l) {
+            l->logMsg(iLog::logLevel::INFO, LOG_FUNC, "iBot destructor complete");
+        }
     }
 
     TgBot::Bot* bot = nullptr;
@@ -23,8 +31,10 @@ public:
     applicationConfig* aConfig = nullptr;
     userInfo* uInfo = nullptr;
 
+    void setUploadDbSql(iUploadDatabaseSql* db) { iUploadDbSql = db; }
+    void setUserDbSql(iUserDatabaseSql* db) { iUserDbSql = db; }
+
 protected:
-    iCjson* json = nullptr;
     iUploadDatabaseSql* iUploadDbSql = nullptr;
     iUserDatabaseSql* iUserDbSql = nullptr;
 
@@ -126,6 +136,13 @@ class joinConfirmIKHandler : public inlineKeyboardHandler {
 public:
     unsigned char canHandle(TgBot::CallbackQuery::Ptr cBQueryPtr) override;
     void handle(TgBot::CallbackQuery::Ptr cBQueryPtr) override;
+
+};
+
+class checkBotDbHandler : public iBot {
+public:
+    unsigned char isUserInBotDb(const char* databasePath, int64_t userId);
+    void handleAfterJoinConfirm(int64_t userId, int64_t chatId);
 
 };
 
