@@ -52,7 +52,8 @@ int main() {
 
         }
 
-        char* buffer = (char*)malloc(1024 * 1024 * sizeof(char));
+        size_t bufferSize = 1024 * 1024 * sizeof(char);
+        char* buffer = (char*)malloc(bufferSize);
         if (!buffer) {
             logger->logMsg(iLog::logLevel::ERROR, LOG_FUNC, "Failed to allocate buffer for config.json");
 
@@ -63,12 +64,12 @@ int main() {
 
         }
 
-        size_t rBytes = fread(buffer, sizeof(char), 1024 * 1024 * sizeof(char), fp);
+        size_t rBytes = fread(buffer, sizeof(char), bufferSize - 1, fp);
         buffer[rBytes] = '\0';
 
         fclose(fp);
 
-        std::string logMsg = "Config loaded (" + std::to_string(rBytes) + " bytes)";
+        std::string logMsg = "Config loaded: " + std::to_string(rBytes) + " bytes)";
         logger->logMsg(iLog::logLevel::INFO, LOG_FUNC, logMsg.c_str());
 
         iCjson* json = new cJsonDerived();
