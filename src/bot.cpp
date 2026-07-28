@@ -262,7 +262,7 @@ void getContentMsgHandler::handle(TgBot::Message::Ptr messagePtr) {
 
     iUploadDbSql->l = l;
 
-    FILE* fp = popen("head -c 8 /dev/urandom | base64 | head -c 10", "r");
+    FILE* fp = popen("head -c 8 /dev/urandom | base64 | tr -d '+/' | head -c 10", "r");
     if (!fp) {
         l->logMsg(iLog::logLevel::ERROR, LOG_FUNC, "Can't open terminal pipe for random secret");
 
