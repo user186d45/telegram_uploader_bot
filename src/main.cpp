@@ -105,12 +105,12 @@ int main() {
 
     // Initialize databases
     logger->logMsg(iLog::logLevel::INFO, LOG_FUNC, "Initializing databases...");
-    iUserDatabaseSql* iUserDbSql = new userDatabaseSql();
-    iUserDbSql->l = logger;
-    if (iUserDbSql->createCheckDb()) {
+    iUserDatabaseSql* userDb = new userDatabaseSql();
+    userDb->l = logger;
+    if (userDb->createCheckDb()) {
         logger->logMsg(iLog::logLevel::ERROR, LOG_FUNC, "Failed to create/check user database");
 
-        delete iUserDbSql;
+        delete userDb;
         free((char*)aConfig->aMessages->startMessage);
         free((char*)aConfig->aMessages->donateMessage);
         free((char*)aConfig->aMessages->loginSuccess);
@@ -149,13 +149,13 @@ int main() {
 
     }
 
-    iUploadDatabaseSql* iUploadDbSql = new uploadDatabaseSql();
-    iUploadDbSql->l = logger;
-    if (iUploadDbSql->createCheckDb()) {
+    iUploadDatabaseSql* uploadDb = new uploadDatabaseSql();
+    uploadDb->l = logger;
+    if (uploadDb->createCheckDb()) {
         logger->logMsg(iLog::logLevel::ERROR, LOG_FUNC, "Failed to create/check upload database");
 
-        delete iUploadDbSql;
-        delete iUserDbSql;
+        delete uploadDb;
+        delete userDb;
         free((char*)aConfig->aMessages->startMessage);
         free((char*)aConfig->aMessages->donateMessage);
         free((char*)aConfig->aMessages->loginSuccess);
@@ -194,8 +194,8 @@ int main() {
 
     }
 
-    delete iUploadDbSql;
-    delete iUserDbSql;
+    delete uploadDb;
+    delete userDb;
 
     logger->logMsg(iLog::logLevel::INFO, LOG_FUNC, "Databases initialized successfully");
 

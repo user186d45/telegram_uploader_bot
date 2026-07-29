@@ -2,8 +2,6 @@
 #define BOT_TELEGRAM_UPLOADER_HPP
 
 #include "../include/structs.hpp"
-#include "../include/cjson.hpp"
-#include "../include/sqlite.hpp"
 #include "../include/log.hpp"
 
 #include <tgbot/tgbot.h>
@@ -17,12 +15,10 @@ public:
             l->logMsg(iLog::logLevel::INFO, LOG_FUNC, "iBot destructor called");
         }
 
-        delete iUploadDbSql;
-        delete iUserDbSql;
-
         if (l) {
             l->logMsg(iLog::logLevel::INFO, LOG_FUNC, "iBot destructor complete");
         }
+
     }
 
     TgBot::Bot* bot = nullptr;
@@ -31,13 +27,7 @@ public:
     applicationConfig* aConfig = nullptr;
     userInfo* uInfo = nullptr;
 
-    void setUploadDbSql(iUploadDatabaseSql* db) { iUploadDbSql = db; }
-    void setUserDbSql(iUserDatabaseSql* db) { iUserDbSql = db; }
-
 protected:
-    iUploadDatabaseSql* iUploadDbSql = nullptr;
-    iUserDatabaseSql* iUserDbSql = nullptr;
-
     void updateUserInfoFromMessage(TgBot::Message::Ptr messagePtr);
     void updateUserInfoFromCallback(TgBot::CallbackQuery::Ptr cBQueryPtr);
 
