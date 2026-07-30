@@ -28,6 +28,10 @@ find_library(CJSON_LIBRARY NAMES cjson)
 # Find SQLite3 library
 find_package(SQLite3 REQUIRED)
 
+# Find PCRE2
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(PCRE2 REQUIRED libpcre2-8)
+
 # Find OpenSSL (required by TgBot)
 find_package(OpenSSL REQUIRED)
 
@@ -39,6 +43,7 @@ include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${TGBOT_INCLUDE_DIR}
     ${CJSON_INCLUDE_DIR}
+    ${PCRE2_INCLUDE_DIRS}
 )
 
 # Link directories
@@ -65,6 +70,7 @@ add_executable(${PROJECT_NAME} ${SOURCES})
 target_link_libraries(${PROJECT_NAME}
     ${TGBOT_LIBRARY}
     ${CJSON_LIBRARY}
+    ${PCRE2_LIBRARIES}
     SQLite::SQLite3
     OpenSSL::SSL
     OpenSSL::Crypto

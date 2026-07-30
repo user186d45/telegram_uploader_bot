@@ -3,7 +3,6 @@
 
 #include <stdint.h>
 #include <vector>
-#include <string>
 
 struct applicationMessages {
     const char* startMessage = nullptr;
@@ -14,6 +13,9 @@ struct applicationMessages {
     const char* channelJoinConfirmText = nullptr;
     const char* channelJoinSuccessMessage = nullptr;
     const char* messageDeleted = nullptr;
+    const char* errorReplyToBot = nullptr;
+    const char* errorWrongMessage = nullptr;
+    const char* deepLinkBtnText = nullptr;
 
 };
 
@@ -37,7 +39,8 @@ struct applicationConfig {
 
 enum conversationState : uint8_t {
     IDLE,
-    GET_LINKS
+    LOGGED_IN,
+    GET_EDIT_MESSAGE
 
 };
 
@@ -50,7 +53,7 @@ struct userInfo {
 
 struct uploadInfo {
     int64_t                     messageId = 0;
-    std::string                 secret;
+    const char*                 secret;
 
 };
 

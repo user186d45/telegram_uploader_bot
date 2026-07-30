@@ -560,7 +560,7 @@ unsigned char uploadDatabaseSql::writeUploadData() {
     }
 
     sqlite3_bind_int64(stmt, 1, upInfo->messageId);
-    sqlite3_bind_text(stmt, 2, (!upInfo->secret.empty() ? upInfo->secret.c_str() : NULL), -1, SQLITE_STATIC);
+    sqlite3_bind_text(stmt, 2, (upInfo->secret ? upInfo->secret : NULL), -1, SQLITE_STATIC);
 
     rc = sqlite3_step(stmt);
     if (rc != SQLITE_DONE) {
@@ -614,7 +614,7 @@ unsigned char uploadDatabaseSql::readUploadData() {
 
     }
 
-    sqlite3_bind_text(stmt, 1, (!upInfo->secret.empty() ? upInfo->secret.c_str() : NULL), -1, SQLITE_STATIC);
+    sqlite3_bind_text(stmt, 1, (upInfo->secret ? upInfo->secret : NULL), -1, SQLITE_STATIC);
     rc = sqlite3_step(stmt);
     if (rc != SQLITE_ROW) {
         l->logMsg(iLog::logLevel::INFO, LOG_FUNC, "Upload not found in database");

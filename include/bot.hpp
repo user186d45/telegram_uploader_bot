@@ -43,6 +43,17 @@ protected:
     }
 
     template<typename... Args>
+    TgBot::Message::Ptr copyMessage(Args&&... args) {
+        try {
+            return bot->getApi().copyMessage(std::forward<Args>(args)...);
+        } catch (TgBot::TgException& e) {
+            l->logMsg(iLog::logLevel::ERROR, "forwardMessage",
+                ("Failed: " + std::string(e.what())).c_str());
+            throw;
+        }
+    }
+
+    template<typename... Args>
     TgBot::Message::Ptr forwardMessage(Args&&... args) {
         try {
             return bot->getApi().forwardMessage(std::forward<Args>(args)...);
@@ -108,7 +119,14 @@ public:
 
 };
 
-class getContentMsgHandler : public messageHandler {
+class getTargetMessageMsgHandler : public messageHandler {
+public:
+    unsigned char canHandle(TgBot::Message::Ptr messagePtr) override;
+    void handle(TgBot::Message::Ptr messagePtr) override;
+
+};
+
+class getMessage2EditmsgHandler : public messageHandler {
 public:
     unsigned char canHandle(TgBot::Message::Ptr messagePtr) override;
     void handle(TgBot::Message::Ptr messagePtr) override;
