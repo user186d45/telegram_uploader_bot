@@ -1,23 +1,109 @@
 #include "../include/bot.hpp"
+#include "../include/sqlite.hpp"
 
+#define PCRE2_CODE_UNIT_WIDTH 8
+
+#include <stdio.h>
 #include <string.h>
+#include <inttypes.h>
+#include <pcre2.h>
 #include <vector>
 #include <cstdio>
 
 void iBot::updateUserInfoFromMessage(TgBot::Message::Ptr messagePtr) {
-    iUserDatabaseSql* sqlLocal = new userDatabaseSql();
-    sqlLocal->l = l;
-    sqlLocal->uInfo = uInfo;
-    sqlLocal->readUserById(messagePtr->from->id);
-    delete sqlLocal;
+    if (!l || !uInfo || !messagePtr) {
+        if (l) {
+            l->logMsg(iLog::logLevel::WARNING, LOG_FUNC, "Missing required instances, skipping user update");
+
+        }
+
+        return;
+
+    }
+
+    l->logMsg(iLog::logLevel::INFO, LOG_FUNC, "Function called");
+
+    int64_t messageUserId = messagePtr->chat ? messagePtr->chat->id : (messagePtr->from ? messagePtr->from->id : 0);
+    if (messageUserId == 0) {
+        l->logMsg(iLog::logLevel::WARNING, LOG_FUNC, "Could not determine user ID from message");
+
+        return;
+
+    }
+    
+    iUserDatabaseSql* userDb = new userDatabaseSql();
+    userDb->l = l;
+    userDb->uInfo = uInfo;
+
+    userDb->createCheckDb();
+
+    {
+        userInfo fresh{};
+        fresh.userId = uInfo->userId;
+        *uInfo = fresh;
+    }
+
+    if (!userDb->readUserById(messageUserId)) {
+        l->logMsg(iLog::logLevel::INFO, LOG_FUNC, "User not found in database, will create new entry");
+        uInfo->userId = messageUserId;
+
+        userDb->writeUserData(iUserDatabaseSql::userDataRW::ALL);
+
+    } else {
+        l->logMsg(iLog::logLevel::INFO, LOG_FUNC, "User data loaded from database");
+
+    }
+    
+    delete(userDb);
+
 }
 
 void iBot::updateUserInfoFromCallback(TgBot::CallbackQuery::Ptr cBQueryPtr) {
-    iUserDatabaseSql* sqlLocal = new userDatabaseSql();
-    sqlLocal->l = l;
-    sqlLocal->uInfo = uInfo;
-    sqlLocal->readUserById(cBQueryPtr->from->id);
-    delete sqlLocal;
+    if (!l || !uInfo || !cBQueryPtr) {
+        if (l) {
+            l->logMsg(iLog::logLevel::WARNING, LOG_FUNC, "Missing required instances, skipping user update");
+
+        }
+
+        return;
+
+    }
+
+    l->logMsg(iLog::logLevel::INFO, LOG_FUNC, "Function called");
+    
+    int64_t callbackUserId = cBQueryPtr->from ? cBQueryPtr->from->id : 0;
+    if (callbackUserId == 0) {
+        l->logMsg(iLog::logLevel::WARNING, LOG_FUNC, "Could not determine user ID from callback");
+
+        return;
+
+    }
+    
+    iUserDatabaseSql* userDb = new userDatabaseSql();
+    userDb->l = l;
+    userDb->uInfo = uInfo;
+
+    userDb->createCheckDb();
+
+    {
+        userInfo fresh{};
+        fresh.userId = uInfo->userId;
+        *uInfo = fresh;
+    }
+
+    if (!userDb->readUserById(callbackUserId)) {
+        l->logMsg(iLog::logLevel::INFO, LOG_FUNC, "User not found in database, will create new entry");
+        uInfo->userId = callbackUserId;
+
+        userDb->writeUserData(iUserDatabaseSql::userDataRW::ALL);
+
+    } else {
+        l->logMsg(iLog::logLevel::INFO, LOG_FUNC, "User data loaded from database");
+
+    }
+    
+    delete(userDb);
+
 }
 
 unsigned char startCommandHandler::canHandle(TgBot::Message::Ptr messagePtr) {
@@ -28,11 +114,11 @@ unsigned char startCommandHandler::canHandle(TgBot::Message::Ptr messagePtr) {
 void startCommandHandler::handle(TgBot::Message::Ptr messagePtr) {
     updateUserInfoFromMessage(messagePtr);
 
-    iUserDatabaseSql* sqlLocal = new userDatabaseSql();
-    sqlLocal->l = l;
-    sqlLocal->uInfo = uInfo;
-    sqlLocal->writeUserData(iUserDatabaseSql::userDataRW::ALL);
-    delete sqlLocal;
+    iUserDatabaseSql* userDb = new userDatabaseSql();
+    userDb->l = l;
+    userDb->uInfo = uInfo;
+    userDb->writeUserData(iUserDatabaseSql::userDataRW::ALL);
+    delete userDb;
 
     TgBot::InlineKeyboardMarkup::Ptr iKeyboardM(new TgBot::InlineKeyboardMarkup);
     
@@ -86,22 +172,24 @@ void startCommandHandler::handle(TgBot::Message::Ptr messagePtr) {
 
     }
 
-    iUploadDbSql = new uploadDatabaseSql();
-    if (!iUploadDbSql) {
-        l->logMsg(iLog::logLevel::ERROR, LOG_FUNC, "Cannot allocate iUploadDbSql");
+    uploadDatabaseSql* uploadDb = new uploadDatabaseSql();
+    if (!uploadDb) {
+        l->logMsg(iLog::logLevel::ERROR, LOG_FUNC, "Cannot allocate uploadDb");
 
         return;
 
     }
 
-    iUploadDbSql->l = l;
+    uploadDb->l = l;
 
-    struct uploadInfo upInfo = {.secret = messagePtr->text.substr(7)};
+    char* secretCopy = (char*)malloc(64 * sizeof(char));
+    snprintf(secretCopy, 64, "%s", messagePtr->text.substr(7).c_str());
+    struct uploadInfo upInfo = {.secret = secretCopy};
 
-    iUploadDbSql->upInfo = &upInfo;
-    iUploadDbSql->readUploadData();
-    delete iUploadDbSql;
-    iUploadDbSql = nullptr;
+    uploadDb->upInfo = &upInfo;
+    uploadDb->readUploadData();
+    delete uploadDb;
+    free(secretCopy);
 
     if (!upInfo.messageId) {
         std::string msgText = "The secret is invalid, no message corresponding to the provided secret found.";
@@ -201,14 +289,14 @@ unsigned char getPasswordMsgHandler::canHandle(TgBot::Message::Ptr messagePtr) {
 
 void getPasswordMsgHandler::handle(TgBot::Message::Ptr messagePtr) {
 
-    iUserDatabaseSql* sqlLocal = new userDatabaseSql();
-    sqlLocal->l = l;
-    sqlLocal->uInfo = uInfo;
+    iUserDatabaseSql* userDb = new userDatabaseSql();
+    userDb->l = l;
+    userDb->uInfo = uInfo;
 
-    if (uInfo->cState == GET_LINKS) {
+    if (uInfo->cState == LOGGED_IN) {
         uInfo->cState = IDLE;
 
-        sqlLocal->writeUserData(iUserDatabaseSql::userDataRW::CONVERSATION_STATE);
+        userDb->writeUserData(iUserDatabaseSql::userDataRW::CONVERSATION_STATE);
 
         sendMessage(
                 uInfo->userId,
@@ -219,9 +307,9 @@ void getPasswordMsgHandler::handle(TgBot::Message::Ptr messagePtr) {
         );
 
     } else {
-        uInfo->cState = GET_LINKS;
+        uInfo->cState = LOGGED_IN;
 
-        sqlLocal->writeUserData(iUserDatabaseSql::userDataRW::CONVERSATION_STATE);
+        userDb->writeUserData(iUserDatabaseSql::userDataRW::CONVERSATION_STATE);
 
         sendMessage(
                 uInfo->userId,
@@ -233,12 +321,12 @@ void getPasswordMsgHandler::handle(TgBot::Message::Ptr messagePtr) {
 
     }
 
-    delete sqlLocal;
+    delete userDb;
 
     l->logMsg(iLog::logLevel::INFO, LOG_FUNC, "getPasswordMsgHandler::handle complete");
 }
 
-unsigned char getContentMsgHandler::canHandle(TgBot::Message::Ptr messagePtr) {
+unsigned char getTargetMessageMsgHandler::canHandle(TgBot::Message::Ptr messagePtr) {
     if (!uInfo) {
         return 0;
 
@@ -246,71 +334,234 @@ unsigned char getContentMsgHandler::canHandle(TgBot::Message::Ptr messagePtr) {
 
     updateUserInfoFromMessage(messagePtr);
 
-    return (uInfo->cState == GET_LINKS) ? 1 : 0;
+    return (uInfo->cState == conversationState::LOGGED_IN) ? 1 : 0;
 
 }
 
-void getContentMsgHandler::handle(TgBot::Message::Ptr messagePtr) {
+void getTargetMessageMsgHandler::handle(TgBot::Message::Ptr messagePtr) {
+    char* msgText = (char*)malloc(64 * sizeof(char));
+    snprintf(msgText, 64, "/%i", messagePtr->messageId);
+    try {
+        bot->getApi().sendMessage(
+                uInfo->userId,
+                msgText,
+                nullptr,
+                nullptr,
+                nullptr
+        );
 
-    iUploadDbSql = new uploadDatabaseSql();
-    if (!iUploadDbSql) {
-        l->logMsg(iLog::logLevel::ERROR, LOG_FUNC, "Cannot allocate iUploadDbSql");
+    } catch (...) {
+        free(msgText);
+
+        throw;
+
+    }
+
+    free(msgText);
+
+    uInfo->cState = conversationState::GET_EDIT_MESSAGE;
+    {
+        iUserDatabaseSql* userDb = new userDatabaseSql();
+        userDb->l = l;
+        userDb->uInfo = uInfo;
+        userDb->writeUserData(iUserDatabaseSql::userDataRW::CONVERSATION_STATE);
+        delete userDb;
+
+    }
+
+}
+
+unsigned char getMessage2EditmsgHandler::canHandle(TgBot::Message::Ptr messagePtr) {
+    if (!uInfo) {
+        return 0;
+
+    }
+
+    updateUserInfoFromMessage(messagePtr);
+
+    return (uInfo->cState == conversationState::GET_EDIT_MESSAGE) ? 1 : 0;
+
+}
+
+void getMessage2EditmsgHandler::handle(TgBot::Message::Ptr messagePtr) {
+    if (!messagePtr->replyToMessage) {
+        const char* msgText = aConfig->aMessages->errorReplyToBot;
+        sendMessage(
+                uInfo->userId,
+                msgText,
+                nullptr,
+                nullptr,
+                nullptr
+        );
+
+        uInfo->cState = conversationState::LOGGED_IN;
+        {
+            iUserDatabaseSql* userDb = new userDatabaseSql();
+            userDb->uInfo = uInfo;
+            userDb->l = l;
+            userDb->writeUserData(iUserDatabaseSql::userDataRW::CONVERSATION_STATE);
+            delete userDb;
+
+        }
 
         return;
 
     }
 
-    iUploadDbSql->l = l;
+    int errorCode = 0;
+    PCRE2_SIZE errorOffset = 0;
+    pcre2_code* re = pcre2_compile((PCRE2_SPTR8)"^/([0-9]+)$", PCRE2_ZERO_TERMINATED, 0, &errorCode, &errorOffset, NULL);
+    if (!re) {
+        PCRE2_UCHAR regexErrMsg[128];
+        pcre2_get_error_message(errorCode, regexErrMsg, sizeof(regexErrMsg));
+        char* errMsg = (char*)malloc(256 * sizeof(char));
+        snprintf(errMsg, 256, "Regex compile error at %zu: %s", errorOffset, (char*)regexErrMsg);
+        l->logMsg(iLog::logLevel::ERROR, LOG_FUNC, errMsg);
+
+        free(errMsg);
+
+        return;
+
+    }
+
+    pcre2_match_data* matchData = pcre2_match_data_create_from_pattern(re, NULL);
+
+    int rc = pcre2_match(re, (PCRE2_SPTR8)messagePtr->replyToMessage->text.c_str(), messagePtr->replyToMessage->text.size(), 0, 0, matchData, NULL);
+    if (rc != 2) {
+        l->logMsg(iLog::logLevel::ERROR, LOG_FUNC, "No matches found at the replied message");
+        const char* msgText = aConfig->aMessages->errorWrongMessage;
+        sendMessage(
+                uInfo->userId,
+                msgText,
+                nullptr,
+                nullptr,
+                nullptr
+        );
+
+        uInfo->cState = conversationState::LOGGED_IN;
+        {
+            iUserDatabaseSql* userDb = new userDatabaseSql();
+            userDb->uInfo = uInfo;
+            userDb->l = l;
+            userDb->writeUserData(iUserDatabaseSql::userDataRW::CONVERSATION_STATE);
+            delete userDb;
+
+        }
+
+        pcre2_match_data_free(matchData);
+        pcre2_code_free(re);
+
+        return;
+
+    }
+
+    PCRE2_SIZE* ovector = pcre2_get_ovector_pointer(matchData);
+
+    char* msgIdStr = (char*)malloc(64 * sizeof(char));
+    snprintf(msgIdStr, 64, "%.*s", (int)(ovector[3] - ovector[2]), messagePtr->replyToMessage->text.substr(ovector[2]).c_str());
+    int64_t extractedFromReplyMsgId = strtoll(msgIdStr, NULL, 10);
+    free(msgIdStr);
+
+    TgBot::Message::Ptr forwardedMsg = forwardMessage(
+            aConfig->privateChannelChatId,
+            uInfo->userId,
+            extractedFromReplyMsgId
+    );
+
+    pcre2_match_data_free(matchData);
+    pcre2_code_free(re);
 
     FILE* fp = popen("head -c 8 /dev/urandom | base64 | tr -d '+/' | head -c 10", "r");
     if (!fp) {
         l->logMsg(iLog::logLevel::ERROR, LOG_FUNC, "Can't open terminal pipe for random secret");
 
-        delete iUploadDbSql;
         return;
 
     }
 
-    char buffer[64];
-    std::string secret;
-    while (fgets(buffer, sizeof(buffer), fp)) {
-        secret += buffer;
+    char secret[64];
+    while (fgets(secret, sizeof(secret), fp)) {
 
     }
 
     pclose(fp);
 
-    while (!secret.empty() && (secret.back() == '\n' || secret.back() == '\r')) {
-        secret.pop_back();
+    size_t secretLen = strlen(secret);
+    for (size_t i = 0; i < secretLen; i++) {
+        if (secret[i] == '\n' || secret[i] == '\r') {
+            secret[i] = '\0';
+            break;
+
+        }
 
     }
 
-    TgBot::Message::Ptr forwardedMsg = forwardMessage(
-            aConfig->privateChannelChatId,
-            uInfo->userId,
-            messagePtr->messageId
-    );
+    {
+        uploadDatabaseSql* uploadDb = new uploadDatabaseSql();
+        if (!uploadDb) {
+            l->logMsg(iLog::logLevel::ERROR, LOG_FUNC, "Cannot allocate uploadDb");
 
-    struct uploadInfo upInfo = {
-        .messageId = static_cast<int64_t>(forwardedMsg->messageId),
-        .secret = secret
-    };
+            return;
 
-    iUploadDbSql->upInfo = &upInfo;
-    iUploadDbSql->writeUploadData();
-    delete iUploadDbSql;
-    iUploadDbSql = nullptr;
+        }
 
-    std::string msgText = "https://t.me/" + bot->getApi().getMe()->username + "?start=" + upInfo.secret;
-    sendMessage(
-            uInfo->userId,
-            msgText,
-            nullptr,
-            nullptr,
-            nullptr
-    );
+        uploadDb->l = l;
 
-    l->logMsg(iLog::logLevel::INFO, LOG_FUNC, "getContentMsgHandler::handle complete");
+        struct uploadInfo upInfo = {
+            .messageId = static_cast<int64_t>(forwardedMsg->messageId),
+            .secret = secret
+        };
+
+        uploadDb->upInfo = &upInfo;
+        uploadDb->writeUploadData();
+        delete uploadDb;
+
+    }
+
+    char* deepLink = (char*)malloc(256 * sizeof(char));
+    if (!deepLink) {
+        l->logMsg(iLog::logLevel::ERROR, LOG_FUNC, "Memory allocation failed for deepLink");
+
+        return;
+
+    }
+    snprintf(deepLink, 256, "https://t.me/%s?start=%s", bot->getApi().getMe()->username.c_str(), secret);
+
+    TgBot::InlineKeyboardMarkup::Ptr iKeyboardM(new TgBot::InlineKeyboardMarkup);
+
+    std::vector<TgBot::InlineKeyboardButton::Ptr> row;
+
+    TgBot::InlineKeyboardButton::Ptr deepLinkBtn(new TgBot::InlineKeyboardButton);
+    const char* deepLinkText = aConfig->aMessages->deepLinkBtnText;
+    deepLinkBtn->text = deepLinkText;
+    deepLinkBtn->url = deepLink;
+    row.push_back(deepLinkBtn);
+
+    iKeyboardM->inlineKeyboard.push_back(row);
+
+    try {
+        bot->getApi().copyMessage(
+                uInfo->userId,
+                uInfo->userId,
+                messagePtr->messageId,
+                "",
+                "",
+                std::vector<TgBot::MessageEntity::Ptr>(),
+                false,
+                nullptr,
+                iKeyboardM,
+                false,
+                0
+        );
+
+    } catch (...) {
+        free(deepLink);
+
+        throw;
+
+    }
+
+    free(deepLink);
 
 }
 
@@ -344,11 +595,11 @@ unsigned char channelJoinMsgHandler::canHandle(TgBot::Message::Ptr messagePtr) {
                 if (uInfo->hasJoined) {
                     uInfo->hasJoined = 0;
 
-                    iUserDatabaseSql* sqlLocal = new userDatabaseSql();
-                    sqlLocal->l = l;
-                    sqlLocal->uInfo = uInfo;
-                    sqlLocal->writeUserData(iUserDatabaseSql::userDataRW::HAS_JOINED);
-                    delete sqlLocal;
+                    iUserDatabaseSql* userDb = new userDatabaseSql();
+                    userDb->l = l;
+                    userDb->uInfo = uInfo;
+                    userDb->writeUserData(iUserDatabaseSql::userDataRW::HAS_JOINED);
+                    delete userDb;
 
                 }
 
@@ -361,11 +612,11 @@ unsigned char channelJoinMsgHandler::canHandle(TgBot::Message::Ptr messagePtr) {
         if (!uInfo->hasJoined) {
             uInfo->hasJoined = 1;
 
-            iUserDatabaseSql* sqlLocal = new userDatabaseSql();
-            sqlLocal->l = l;
-            sqlLocal->uInfo = uInfo;
-            sqlLocal->writeUserData(iUserDatabaseSql::userDataRW::HAS_JOINED);
-            delete sqlLocal;
+            iUserDatabaseSql* userDb = new userDatabaseSql();
+            userDb->l = l;
+            userDb->uInfo = uInfo;
+            userDb->writeUserData(iUserDatabaseSql::userDataRW::HAS_JOINED);
+            delete userDb;
 
         }
 
@@ -482,11 +733,11 @@ void joinConfirmIKHandler::handle(TgBot::CallbackQuery::Ptr cBQueryPtr) {
             if (!uInfo->hasJoined) {
                 uInfo->hasJoined = 1;
 
-                iUserDatabaseSql* sqlLocal = new userDatabaseSql();
-                sqlLocal->l = l;
-                sqlLocal->uInfo = uInfo;
-                sqlLocal->writeUserData(iUserDatabaseSql::userDataRW::HAS_JOINED);
-                delete sqlLocal;
+                iUserDatabaseSql* userDb = new userDatabaseSql();
+                userDb->l = l;
+                userDb->uInfo = uInfo;
+                userDb->writeUserData(iUserDatabaseSql::userDataRW::HAS_JOINED);
+                delete userDb;
 
             }
 
@@ -494,11 +745,11 @@ void joinConfirmIKHandler::handle(TgBot::CallbackQuery::Ptr cBQueryPtr) {
             if (uInfo->hasJoined) {
                 uInfo->hasJoined = 0;
 
-                iUserDatabaseSql* sqlLocal = new userDatabaseSql();
-                sqlLocal->l = l;
-                sqlLocal->uInfo = uInfo;
-                sqlLocal->writeUserData(iUserDatabaseSql::userDataRW::HAS_JOINED);
-                delete sqlLocal;
+                iUserDatabaseSql* userDb = new userDatabaseSql();
+                userDb->l = l;
+                userDb->uInfo = uInfo;
+                userDb->writeUserData(iUserDatabaseSql::userDataRW::HAS_JOINED);
+                delete userDb;
 
             }
 

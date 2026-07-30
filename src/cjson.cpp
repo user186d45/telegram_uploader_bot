@@ -2,6 +2,7 @@
 #include "../include/cjson.hpp"
 #include "../include/log.hpp"
 
+#include <string>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -275,7 +276,10 @@ applicationConfig* cJsonDerived::applicationConfigParse(const char* json) {
             cJSON_HasObjectItem(messageObj, "channelJoinMessage") &&
             cJSON_HasObjectItem(messageObj, "channelJoinConfirmText") &&
             cJSON_HasObjectItem(messageObj, "channelJoinSuccessMessage") &&
-            cJSON_HasObjectItem(messageObj, "messageDeleted")
+            cJSON_HasObjectItem(messageObj, "messageDeleted") &&
+            cJSON_HasObjectItem(messageObj, "errorReplyToBot") &&
+            cJSON_HasObjectItem(messageObj, "errorWrongMessage") &&
+            cJSON_HasObjectItem(messageObj, "deepLinkBtnText")
            ) {
             const char* startMessage = cJSON_GetObjectItem(messageObj, "startMessage")->valuestring;
             char* startMessageCopy = (char*)malloc((strlen(startMessage) + 1) * sizeof(char));
@@ -340,6 +344,30 @@ applicationConfig* cJsonDerived::applicationConfigParse(const char* json) {
 
             aConfig->aMessages->messageDeleted = messageDeletedCopy;
             messageDeletedCopy = nullptr;
+
+            const char* errorReplyToBot = cJSON_GetObjectItem(messageObj, "errorReplyToBot")->valuestring;
+            char* errorReplyToBotCopy = (char*)malloc((strlen(errorReplyToBot) + 1) * sizeof(char));
+            strncpy(errorReplyToBotCopy, errorReplyToBot, strlen(errorReplyToBot));
+            errorReplyToBotCopy[strlen(errorReplyToBot)] = '\0';
+
+            aConfig->aMessages->errorReplyToBot = errorReplyToBotCopy;
+            errorReplyToBotCopy = nullptr;
+
+            const char* errorWrongMessage = cJSON_GetObjectItem(messageObj, "errorWrongMessage")->valuestring;
+            char* errorWrongMessageCopy = (char*)malloc((strlen(errorWrongMessage) + 1) * sizeof(char));
+            strncpy(errorWrongMessageCopy, errorWrongMessage, strlen(errorWrongMessage));
+            errorWrongMessageCopy[strlen(errorWrongMessage)] = '\0';
+
+            aConfig->aMessages->errorWrongMessage = errorWrongMessageCopy;
+            errorWrongMessageCopy = nullptr;
+
+            const char* deepLinkBtnText = cJSON_GetObjectItem(messageObj, "deepLinkBtnText")->valuestring;
+            char* deepLinkBtnTextCopy = (char*)malloc((strlen(deepLinkBtnText) + 1) * sizeof(char));
+            strncpy(deepLinkBtnTextCopy, deepLinkBtnText, strlen(deepLinkBtnText));
+            deepLinkBtnTextCopy[strlen(deepLinkBtnText)] = '\0';
+
+            aConfig->aMessages->deepLinkBtnText = deepLinkBtnTextCopy;
+            deepLinkBtnTextCopy = nullptr;
 
         } else {
             l->logMsg(iLog::logLevel::ERROR, LOG_FUNC, "Required elements are not present in the message object");
@@ -418,6 +446,9 @@ applicationConfig* cJsonDerived::applicationConfigParse(const char* json) {
         l->logMsg(iLog::logLevel::INFO, LOG_FUNC, ("channelJoinConfirmText: " + std::string(aConfig->aMessages->channelJoinConfirmText)).c_str());
         l->logMsg(iLog::logLevel::INFO, LOG_FUNC, ("channelJoinSuccessMessage: " + std::string(aConfig->aMessages->channelJoinSuccessMessage)).c_str());
         l->logMsg(iLog::logLevel::INFO, LOG_FUNC, ("messageDeleted: " + std::string(aConfig->aMessages->messageDeleted)).c_str());
+        l->logMsg(iLog::logLevel::INFO, LOG_FUNC, ("errorReplyToBot: " + std::string(aConfig->aMessages->errorReplyToBot)).c_str());
+        l->logMsg(iLog::logLevel::INFO, LOG_FUNC, ("errorWrongMessage: " + std::string(aConfig->aMessages->errorWrongMessage)).c_str());
+        l->logMsg(iLog::logLevel::INFO, LOG_FUNC, ("deepLinkBtnText: " + std::string(aConfig->aMessages->deepLinkBtnText)).c_str());
         l->logMsg(iLog::logLevel::INFO, LOG_FUNC, "--- End of config ---");
 
         cJSON_Delete(jsonParser);

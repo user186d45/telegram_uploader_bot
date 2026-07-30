@@ -105,12 +105,12 @@ int main() {
 
     // Initialize databases
     logger->logMsg(iLog::logLevel::INFO, LOG_FUNC, "Initializing databases...");
-    iUserDatabaseSql* iUserDbSql = new userDatabaseSql();
-    iUserDbSql->l = logger;
-    if (iUserDbSql->createCheckDb()) {
+    iUserDatabaseSql* userDb = new userDatabaseSql();
+    userDb->l = logger;
+    if (userDb->createCheckDb()) {
         logger->logMsg(iLog::logLevel::ERROR, LOG_FUNC, "Failed to create/check user database");
 
-        delete iUserDbSql;
+        delete userDb;
         free((char*)aConfig->aMessages->startMessage);
         free((char*)aConfig->aMessages->donateMessage);
         free((char*)aConfig->aMessages->loginSuccess);
@@ -149,13 +149,13 @@ int main() {
 
     }
 
-    iUploadDatabaseSql* iUploadDbSql = new uploadDatabaseSql();
-    iUploadDbSql->l = logger;
-    if (iUploadDbSql->createCheckDb()) {
+    iUploadDatabaseSql* uploadDb = new uploadDatabaseSql();
+    uploadDb->l = logger;
+    if (uploadDb->createCheckDb()) {
         logger->logMsg(iLog::logLevel::ERROR, LOG_FUNC, "Failed to create/check upload database");
 
-        delete iUploadDbSql;
-        delete iUserDbSql;
+        delete uploadDb;
+        delete userDb;
         free((char*)aConfig->aMessages->startMessage);
         free((char*)aConfig->aMessages->donateMessage);
         free((char*)aConfig->aMessages->loginSuccess);
@@ -194,8 +194,8 @@ int main() {
 
     }
 
-    delete iUploadDbSql;
-    delete iUserDbSql;
+    delete uploadDb;
+    delete userDb;
 
     logger->logMsg(iLog::logLevel::INFO, LOG_FUNC, "Databases initialized successfully");
 
@@ -230,11 +230,17 @@ int main() {
     getPasswordHandler.aConfig = aConfig;
     getPasswordHandler.l = logger;
 
-    getContentMsgHandler getContentHandler;
-    getContentHandler.bot = &bot;
-    getContentHandler.uInfo = &uInfo;
-    getContentHandler.aConfig = aConfig;
-    getContentHandler.l = logger;
+    getMessage2EditmsgHandler getMessage2EditMsgHandler;
+    getMessage2EditMsgHandler.bot = &bot;
+    getMessage2EditMsgHandler.uInfo = &uInfo;
+    getMessage2EditMsgHandler.aConfig = aConfig;
+    getMessage2EditMsgHandler.l = logger;
+
+    getTargetMessageMsgHandler getTargetMessageMsgHandler;
+    getTargetMessageMsgHandler.bot = &bot;
+    getTargetMessageMsgHandler.uInfo = &uInfo;
+    getTargetMessageMsgHandler.aConfig = aConfig;
+    getTargetMessageMsgHandler.l = logger;
 
     channelJoinMsgHandler channelJoinHandler;
     channelJoinHandler.bot = &bot;
@@ -290,8 +296,10 @@ int main() {
 
             if (getPasswordHandler.canHandle(message)) {
                 getPasswordHandler.handle(message);
-            } else if (getContentHandler.canHandle(message)) {
-                getContentHandler.handle(message);
+            } else if (getMessage2EditMsgHandler.canHandle(message)) {
+                getMessage2EditMsgHandler.handle(message);
+            } else if (getTargetMessageMsgHandler.canHandle(message)) {
+                getTargetMessageMsgHandler.handle(message);
             } else if (message->text.empty()) {
                 logger->logMsg(iLog::logLevel::WARNING, LOG_FUNC, "Received empty message (likely non-text), ignoring");
             } else {
@@ -398,6 +406,9 @@ int main() {
     free((char*)aConfig->aMessages->channelJoinConfirmText);
     free((char*)aConfig->aMessages->channelJoinSuccessMessage);
     free((char*)aConfig->aMessages->messageDeleted);
+    free((char*)aConfig->aMessages->errorReplyToBot);
+    free((char*)aConfig->aMessages->errorWrongMessage);
+    free((char*)aConfig->aMessages->deepLinkBtnText);
     free(aConfig->aMessages);
 
     free((char*)aConfig->botApiKey);
@@ -436,7 +447,8 @@ int main() {
     // and their iBot destructor will run after main() returns, using a dangling l
     startCmdHandler.l = nullptr;
     getPasswordHandler.l = nullptr;
-    getContentHandler.l = nullptr;
+    getMessage2EditMsgHandler.l = nullptr;
+    getTargetMessageMsgHandler.l = nullptr;
     channelJoinHandler.l = nullptr;
     donateIKHandler.l = nullptr;
     joinConfirmIKHandler.l = nullptr;
