@@ -137,6 +137,7 @@ class channelJoinMsgHandler : public messageHandler {
 public:
     unsigned char canHandle(TgBot::Message::Ptr messagePtr) override;
     void handle(TgBot::Message::Ptr messagePtr) override;
+    void sendJoinChannelPrompt(int64_t chatId);
 
 };
 
@@ -149,8 +150,10 @@ public:
 
 class checkBotDbHandler : public iBot {
 public:
-    unsigned char isUserInBotDb(const char* databasePath, int64_t userId);
+    bool isUserInAllBots(int64_t userId);
     void handleAfterJoinConfirm(int64_t userId, int64_t chatId);
+
+    channelJoinMsgHandler* joinHandler = nullptr;
 
 };
 

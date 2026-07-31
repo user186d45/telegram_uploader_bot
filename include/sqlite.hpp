@@ -80,4 +80,34 @@ private:
 
 };
 
+class iTargetBotDb {
+public:
+    iTargetBotDb() = default;
+
+    enum class dbCheckResult : int {
+        NOT_FOUND = 0,
+        FOUND = 1,
+        DB_ERROR = 2
+    };
+
+    virtual unsigned char validateDatabase(const char* databasePath) = 0;
+    virtual dbCheckResult isUserInDb(const char* databasePath, int64_t userId) = 0;
+
+    iLog* l = nullptr;
+
+    virtual ~iTargetBotDb() = default;
+
+};
+
+class targetBotDbSql : public iTargetBotDb {
+public:
+    targetBotDbSql() = default;
+
+    unsigned char validateDatabase(const char* databasePath) override;
+    dbCheckResult isUserInDb(const char* databasePath, int64_t userId) override;
+
+    ~targetBotDbSql();
+
+};
+
 #endif

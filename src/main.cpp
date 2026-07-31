@@ -69,7 +69,7 @@ int main() {
 
         fclose(fp);
 
-        std::string logMsg = "Config loaded: " + std::to_string(rBytes) + " bytes)";
+        std::string logMsg = "Config loaded: " + std::to_string(rBytes) + " bytes";
         logger->logMsg(iLog::logLevel::INFO, LOG_FUNC, logMsg.c_str());
 
         iCjson* json = new cJsonDerived();
@@ -100,6 +100,69 @@ int main() {
         }
 
         logger->logMsg(iLog::logLevel::INFO, LOG_FUNC, "Config parsed successfully");
+
+    }
+
+    // Fail fast: terminate if any external bot database cannot be opened
+    iTargetBotDb* targetBotDb = new targetBotDbSql();
+    targetBotDb->l = logger;
+    bool externalDbValid = true;
+
+    if (aConfig->botDatabases && !aConfig->botDatabases->empty()) {
+        for (size_t i = 0; i < aConfig->botDatabases->size(); i++) {
+            if (targetBotDb->validateDatabase(aConfig->botDatabases->at(i).databasePath)) {
+                externalDbValid = false;
+                break;
+
+            }
+
+        }
+
+    }
+
+    delete targetBotDb;
+
+    if (!externalDbValid) {
+        logger->logMsg(iLog::logLevel::ERROR, LOG_FUNC, "External bot database validation failed, terminating");
+
+        free((char*)aConfig->aMessages->startMessage);
+        free((char*)aConfig->aMessages->donateMessage);
+        free((char*)aConfig->aMessages->loginSuccess);
+        free((char*)aConfig->aMessages->loginCancelled);
+        free((char*)aConfig->aMessages->channelJoinMessage);
+        free((char*)aConfig->aMessages->channelJoinConfirmText);
+        free((char*)aConfig->aMessages->channelJoinSuccessMessage);
+        free((char*)aConfig->aMessages->messageDeleted);
+        free((char*)aConfig->aMessages->errorReplyToBot);
+        free((char*)aConfig->aMessages->errorWrongMessage);
+        free((char*)aConfig->aMessages->deepLinkBtnText);
+        free(aConfig->aMessages);
+        free((char*)aConfig->botApiKey);
+        free((char*)aConfig->password);
+        delete aConfig->channels2JoinChatIds;
+        for (size_t i = 0; i < aConfig->channels2JoinUrls->size(); i++) {
+            free((char*)aConfig->channels2JoinUrls->at(i));
+        }
+        delete aConfig->channels2JoinUrls;
+        if (aConfig->adminChatIds) {
+            for (size_t i = 0; i < aConfig->adminChatIds->size(); i++) {
+                free((char*)aConfig->adminChatIds->at(i));
+            }
+            delete aConfig->adminChatIds;
+        }
+        if (aConfig->botDatabases) {
+            for (size_t i = 0; i < aConfig->botDatabases->size(); i++) {
+                free((char*)aConfig->botDatabases->at(i).botName);
+                free((char*)aConfig->botDatabases->at(i).databasePath);
+
+            }
+            delete aConfig->botDatabases;
+
+        }
+        free(aConfig);
+        delete logger;
+
+        return 1;
 
     }
 
@@ -268,11 +331,28 @@ int main() {
     checkBotDbHandler.uInfo = &uInfo;
     checkBotDbHandler.aConfig = aConfig;
     checkBotDbHandler.l = logger;
+    checkBotDbHandler.joinHandler = &channelJoinHandler;
 
     logger->logMsg(iLog::logLevel::INFO, LOG_FUNC, "All handlers initialized");
 
     // Set up bot event handlers
     bot.getEvents().onCommand("start", [&](TgBot::Message::Ptr message) {
+        // Gate: /start runs only for users verified on channels and target bot DBs
+        if (channelJoinHandler.canHandle(message)) {
+            channelJoinHandler.handle(message);
+
+            return;
+
+        }
+
+        int64_t gateUserId = message->from ? message->from->id : message->chat->id;
+        if (!checkBotDbHandler.isUserInAllBots(gateUserId)) {
+            channelJoinHandler.sendJoinChannelPrompt(message->chat->id);
+
+            return;
+
+        }
+
         if (startCmdHandler.canHandle(message)) {
             startCmdHandler.handle(message);
         }
@@ -338,6 +418,58 @@ int main() {
             }
 
             return;
+
+        }
+
+        // Verify channel membership via API before handling other callbacks
+        try {
+            bool isMember = true;
+
+            if (aConfig->channels2JoinChatIds) {
+                for (size_t i = 0; i < aConfig->channels2JoinChatIds->size(); i++) {
+                    TgBot::ChatMember::Ptr chatMemberPtr = bot.getApi().getChatMember(
+                        aConfig->channels2JoinChatIds->at(i),
+                        callbackQuery->from->id
+                    );
+
+                    bool member = strncmp(chatMemberPtr->status.c_str(), "member", 6) == 0 ||
+                                  strncmp(chatMemberPtr->status.c_str(), "administrator", 13) == 0 ||
+                                  strncmp(chatMemberPtr->status.c_str(), "creator", 7) == 0;
+
+                    if (!member) {
+                        isMember = false;
+
+                        break;
+
+                    }
+
+                }
+
+            }
+
+            if (!isMember) {
+                logger->logMsg(iLog::logLevel::WARNING, LOG_FUNC,
+                    ("Blocked callback from user not in channel: " + callbackQuery->data).c_str());
+
+                try {
+                    bot.getApi().answerCallbackQuery(callbackQuery->id);
+                } catch (...) {
+                    logger->logMsg(iLog::logLevel::ERROR, LOG_FUNC, "Failed to answer callback for blocked user");
+                }
+
+                channelJoinHandler.sendJoinChannelPrompt(callbackQuery->from->id);
+
+                return;
+
+            }
+
+        } catch (TgBot::TgException& e) {
+            logger->logMsg(iLog::logLevel::ERROR, LOG_FUNC,
+                ("getChatMember failed: " + std::string(e.what())).c_str());
+            // Fall through to handler chain on API failure
+
+        } catch (...) {
+            logger->logMsg(iLog::logLevel::ERROR, LOG_FUNC, "getChatMember failed with unknown error");
 
         }
 

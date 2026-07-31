@@ -14,7 +14,13 @@
         ""
     ],
     "privateChannelChatId": "",
-    "donateWalletAddress": "",
+    "editMsgTargetChannel": "",
+    "botDatabases": [ // External bots whose DBs are checked for user membership
+        {
+            "Name": "@botUsername",
+            "Path": "/opt/another_bot/user.db"
+        }
+    ],
     "Messages": {
         "startMessage": "",
         "donateMessage": "",
@@ -22,7 +28,11 @@
         "loginCancelled": "Login cancelled, returning to idle state.",
         "channelJoinMessage": "You must join the required channels before using this bot.",
         "channelJoinConfirmText": "Confirm membership",
-        "channelJoinSuccessMessage": "You can now use the bot."
+        "channelJoinSuccessMessage": "You can now use the bot.",
+        "messageDeleted": "This message has been deleted.",
+        "errorReplyToBot": "You have not replied to the provided bot message, please try again",
+        "errorWrongMessage": "You have replied to the wrong message, please try again",
+        "deepLinkBtnText": "Link"
     }
 }
 

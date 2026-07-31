@@ -649,3 +649,89 @@ uploadDatabaseSql::~uploadDatabaseSql() {
     l->logMsg(iLog::logLevel::INFO, LOG_FUNC, "uploadDatabaseSql destructor called");
 
 }
+
+unsigned char targetBotDbSql::validateDatabase(const char* databasePath) {
+    if (!l) {
+
+        return 1;
+
+    }
+
+    if (!databasePath) {
+        l->logMsg(iLog::logLevel::ERROR, LOG_FUNC, "External bot database path is null in config");
+
+        return 1;
+
+    }
+
+    sqlite3* db = nullptr;
+    if (sqlite3_open_v2(databasePath, &db, SQLITE_OPEN_READONLY, nullptr) != SQLITE_OK) {
+        std::string errMsg = "Cannot open external bot database, check path in config: " + std::string(databasePath);
+        l->logMsg(iLog::logLevel::ERROR, LOG_FUNC, errMsg.c_str());
+
+        return 1;
+
+    }
+
+    sqlite3_close(db);
+
+    return 0;
+
+}
+
+iTargetBotDb::dbCheckResult targetBotDbSql::isUserInDb(const char* databasePath, int64_t userId) {
+    if (!l) {
+
+        return iTargetBotDb::dbCheckResult::DB_ERROR;
+
+    }
+
+    if (!databasePath) {
+        l->logMsg(iLog::logLevel::ERROR, LOG_FUNC, "External bot database path is null in config");
+
+        return iTargetBotDb::dbCheckResult::DB_ERROR;
+
+    }
+
+    sqlite3* db = nullptr;
+    if (sqlite3_open_v2(databasePath, &db, SQLITE_OPEN_READONLY, nullptr) != SQLITE_OK) {
+        std::string errMsg = "Cannot open external bot database, check path in config: " + std::string(databasePath);
+        l->logMsg(iLog::logLevel::ERROR, LOG_FUNC, errMsg.c_str());
+
+        return iTargetBotDb::dbCheckResult::DB_ERROR;
+
+    }
+
+    const char* sql = "SELECT userId FROM users WHERE userId = ?";
+    sqlite3_stmt* stmt;
+    if (sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr) != SQLITE_OK) {
+        std::string errMsg = "Cannot prepare statement for external bot database: " + std::string(databasePath);
+        l->logMsg(iLog::logLevel::ERROR, LOG_FUNC, errMsg.c_str());
+
+        sqlite3_close(db);
+        return iTargetBotDb::dbCheckResult::DB_ERROR;
+
+    }
+
+    sqlite3_bind_int64(stmt, 1, userId);
+
+    iTargetBotDb::dbCheckResult result = (sqlite3_step(stmt) == SQLITE_ROW)
+            ? iTargetBotDb::dbCheckResult::FOUND
+            : iTargetBotDb::dbCheckResult::NOT_FOUND;
+
+    sqlite3_finalize(stmt);
+    sqlite3_close(db);
+
+    return result;
+
+}
+
+targetBotDbSql::~targetBotDbSql() {
+    if (!l) {
+        return;
+
+    }
+
+    l->logMsg(iLog::logLevel::INFO, LOG_FUNC, "targetBotDbSql destructor called");
+
+}

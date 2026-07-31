@@ -81,6 +81,7 @@ applicationConfig* cJsonDerived::applicationConfigParse(const char* json) {
         cJSON_HasObjectItem(jsonParser, "channels2JoinUrls") &&
         cJSON_IsArray(cJSON_GetObjectItem(jsonParser, "channels2JoinUrls")) &&
         cJSON_HasObjectItem(jsonParser, "privateChannelChatId") &&
+        cJSON_HasObjectItem(jsonParser, "editMsgTargetChannel") &&
         cJSON_HasObjectItem(jsonParser, "Messages") &&
         cJSON_IsObject(cJSON_GetObjectItem(jsonParser, "Messages"))
        ) {
@@ -205,6 +206,8 @@ applicationConfig* cJsonDerived::applicationConfigParse(const char* json) {
 
         aConfig->privateChannelChatId = strtoll(cJSON_GetObjectItem(jsonParser, "privateChannelChatId")->valuestring, NULL, 10);
 
+        aConfig->editMsgTargetChannel = strtoll(cJSON_GetObjectItem(jsonParser, "editMsgTargetChannel")->valuestring, NULL, 10);
+
         aConfig->botDatabases = new std::vector<struct botInfo>();
         if (!aConfig->botDatabases) {
             l->logMsg(iLog::logLevel::ERROR, LOG_FUNC, "Cannot allocate botDatabases vector inside the applicationConfig struct");
@@ -230,12 +233,18 @@ applicationConfig* cJsonDerived::applicationConfigParse(const char* json) {
             cJSON* botDatabasesArr = cJSON_GetObjectItem(jsonParser, "botDatabases");
             for (int i = 0; i < cJSON_GetArraySize(botDatabasesArr); i++) {
                 cJSON* item = cJSON_GetArrayItem(botDatabasesArr, i);
-                if (!cJSON_HasObjectItem(item, "Name") || !cJSON_HasObjectItem(item, "Path")) {
+
+                cJSON* nameItem = cJSON_GetObjectItem(item, "Name");
+                cJSON* pathItem = cJSON_GetObjectItem(item, "Path");
+                if (!nameItem || !nameItem->valuestring || !pathItem || !pathItem->valuestring) {
+                    l->logMsg(iLog::logLevel::WARNING, LOG_FUNC,
+                        ("botDatabases entry " + std::to_string(i) + " missing/invalid Name or Path, skipping").c_str());
+
                     continue;
 
                 }
 
-                const char* botName = cJSON_GetObjectItem(item, "Name")->valuestring;
+                const char* botName = nameItem->valuestring;
                 char* botNameCopy = (char*)malloc((strlen(botName) + 1) * sizeof(char));
                 if (!botNameCopy) {
                     l->logMsg(iLog::logLevel::ERROR, LOG_FUNC, "Cannot allocate space for botName");
@@ -246,7 +255,7 @@ applicationConfig* cJsonDerived::applicationConfigParse(const char* json) {
                 strncpy(botNameCopy, botName, strlen(botName));
                 botNameCopy[strlen(botName)] = '\0';
 
-                const char* databasePath = cJSON_GetObjectItem(item, "Path")->valuestring;
+                const char* databasePath = pathItem->valuestring;
                 char* databasePathCopy = (char*)malloc((strlen(databasePath) + 1) * sizeof(char));
                 if (!databasePathCopy) {
                     l->logMsg(iLog::logLevel::ERROR, LOG_FUNC, "Cannot allocate space for databasePath");
@@ -402,6 +411,7 @@ applicationConfig* cJsonDerived::applicationConfigParse(const char* json) {
         l->logMsg(iLog::logLevel::INFO, LOG_FUNC, ("botApiKey: " + std::string(aConfig->botApiKey)).c_str());
         l->logMsg(iLog::logLevel::INFO, LOG_FUNC, ("password: " + std::string(aConfig->password)).c_str());
         l->logMsg(iLog::logLevel::INFO, LOG_FUNC, ("privateChannelChatId: " + std::to_string(aConfig->privateChannelChatId)).c_str());
+        l->logMsg(iLog::logLevel::INFO, LOG_FUNC, ("editMsgTargetChannel: " + std::to_string(aConfig->editMsgTargetChannel)).c_str());
 
         std::string adminIds;
         if (aConfig->adminChatIds) {

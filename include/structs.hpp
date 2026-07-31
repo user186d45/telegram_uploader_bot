@@ -32,6 +32,7 @@ struct applicationConfig {
     std::vector<int64_t>*       channels2JoinChatIds = nullptr;
     std::vector<const char*>*   channels2JoinUrls = nullptr;
     int64_t                     privateChannelChatId = 0;
+    int64_t                     editMsgTargetChannel = 0;
     struct applicationMessages* aMessages = nullptr;
     std::vector<struct botInfo>* botDatabases = nullptr;
 

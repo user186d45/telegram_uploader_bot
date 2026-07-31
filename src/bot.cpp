@@ -9,6 +9,206 @@
 #include <pcre2.h>
 #include <vector>
 #include <cstdio>
+#include <cstdlib>
+#include <csignal>
+
+// Appends a "Start <botName>" URL button row for every target bot database the
+// user is missing from. DB_ERROR aborts via SIGINT (fail-fast, like startup validation).
+static void appendStartBotButtonsImpl(
+        iLog* l,
+        const applicationConfig* aConfig,
+        TgBot::InlineKeyboardMarkup::Ptr iKeyboardM,
+        int64_t userId
+) {
+    if (!l || !aConfig || !aConfig->botDatabases || aConfig->botDatabases->empty()) {
+        return;
+
+    }
+
+    iTargetBotDb* targetBotDb = new targetBotDbSql();
+    targetBotDb->l = l;
+
+    for (size_t i = 0; i < aConfig->botDatabases->size(); i++) {
+        const struct botInfo& info = aConfig->botDatabases->at(i);
+
+        iTargetBotDb::dbCheckResult result = targetBotDb->isUserInDb(info.databasePath, userId);
+
+        if (result == iTargetBotDb::dbCheckResult::DB_ERROR) {
+            std::string errMsg = "Fatal: cannot read database for bot '" + std::string(info.botName ? info.botName : "?") +
+                                 "', path may be incorrect in config: " + std::string(info.databasePath ? info.databasePath : "null");
+            l->logMsg(iLog::logLevel::ERROR, LOG_FUNC, errMsg.c_str());
+
+            delete targetBotDb;
+            std::raise(SIGINT);
+
+            return;
+
+        }
+
+        if (result == iTargetBotDb::dbCheckResult::NOT_FOUND) {
+            if (!info.botName) {
+                continue;
+
+            }
+
+            const char* urlName = info.botName;
+            if (urlName[0] == '@') {
+                urlName++;
+
+            }
+
+            if (urlName[0] == '\0') {
+                continue;
+
+            }
+
+            std::vector<TgBot::InlineKeyboardButton::Ptr> row;
+
+            TgBot::InlineKeyboardButton::Ptr botBtn(new TgBot::InlineKeyboardButton);
+            std::string btnText = "Start " + std::string(info.botName);
+            std::string btnUrl = "https://t.me/" + std::string(urlName);
+            botBtn->text = btnText;
+            botBtn->url = btnUrl;
+            row.push_back(botBtn);
+
+            iKeyboardM->inlineKeyboard.push_back(row);
+
+        }
+
+    }
+
+    delete targetBotDb;
+
+}
+
+// True only when the user is present in every target bot database (or none
+// configured). DB_ERROR aborts via SIGINT (fail-fast) and the gate fails closed.
+static bool isUserInAllBotsImpl(iLog* l, const applicationConfig* aConfig, int64_t userId) {
+    if (!l || !aConfig || !aConfig->botDatabases || aConfig->botDatabases->empty()) {
+        return true;
+
+    }
+
+    iTargetBotDb* targetBotDb = new targetBotDbSql();
+    targetBotDb->l = l;
+
+    for (size_t i = 0; i < aConfig->botDatabases->size(); i++) {
+        const struct botInfo& info = aConfig->botDatabases->at(i);
+
+        iTargetBotDb::dbCheckResult result = targetBotDb->isUserInDb(info.databasePath, userId);
+
+        if (result == iTargetBotDb::dbCheckResult::DB_ERROR) {
+            std::string errMsg = "Fatal: cannot read database for bot '" + std::string(info.botName ? info.botName : "?") +
+                                 "', path may be incorrect in config: " + std::string(info.databasePath ? info.databasePath : "null");
+            l->logMsg(iLog::logLevel::ERROR, LOG_FUNC, errMsg.c_str());
+
+            delete targetBotDb;
+            std::raise(SIGINT);
+
+            return false;
+
+        }
+
+        if (result == iTargetBotDb::dbCheckResult::NOT_FOUND) {
+            delete targetBotDb;
+
+            return false;
+
+        }
+
+    }
+
+    delete targetBotDb;
+
+    return true;
+
+}
+
+// Join prompt keyboard order: unjoined channels, missing target bots, confirm.
+// Already-joined channels and present bots are omitted.
+static TgBot::InlineKeyboardMarkup::Ptr buildJoinPromptKeyboard(
+        iLog* l,
+        TgBot::Bot* bot,
+        const applicationConfig* aConfig,
+        int64_t userId
+) {
+    TgBot::InlineKeyboardMarkup::Ptr iKeyboardM(new TgBot::InlineKeyboardMarkup);
+
+    if (aConfig->channels2JoinUrls && bot) {
+        for (size_t i = 0; i < aConfig->channels2JoinUrls->size(); i++) {
+            bool isMember = false;
+
+            if (aConfig->channels2JoinChatIds && i < aConfig->channels2JoinChatIds->size()) {
+                try {
+                    TgBot::ChatMember::Ptr chatMemberPtr = bot->getApi().getChatMember(
+                        aConfig->channels2JoinChatIds->at(i),
+                        userId
+                    );
+
+                    isMember = strncmp(chatMemberPtr->status.c_str(), "member", 6) == 0 ||
+                               strncmp(chatMemberPtr->status.c_str(), "administrator", 13) == 0 ||
+                               strncmp(chatMemberPtr->status.c_str(), "creator", 7) == 0;
+
+                } catch (...) {
+                    l->logMsg(iLog::logLevel::WARNING, LOG_FUNC,
+                        "getChatMember failed while building join prompt, showing channel button");
+                }
+            }
+
+            if (isMember) {
+                continue;
+
+            }
+
+            std::vector<TgBot::InlineKeyboardButton::Ptr> row;
+
+            TgBot::InlineKeyboardButton::Ptr joinBtn(new TgBot::InlineKeyboardButton);
+            joinBtn->text = aConfig->channels2JoinUrls->at(i);
+            joinBtn->url = aConfig->channels2JoinUrls->at(i);
+            row.push_back(joinBtn);
+
+            iKeyboardM->inlineKeyboard.push_back(row);
+
+        }
+
+    }
+
+    appendStartBotButtonsImpl(l, aConfig, iKeyboardM, userId);
+
+    std::vector<TgBot::InlineKeyboardButton::Ptr> confirmRow;
+
+    TgBot::InlineKeyboardButton::Ptr joinConfirmBtn(new TgBot::InlineKeyboardButton);
+    joinConfirmBtn->text = aConfig->aMessages->channelJoinConfirmText;
+    joinConfirmBtn->callbackData = "joinConfirm";
+    confirmRow.push_back(joinConfirmBtn);
+
+    iKeyboardM->inlineKeyboard.push_back(confirmRow);
+
+    return iKeyboardM;
+
+}
+
+static void sendJoinPrompt(iLog* l, TgBot::Bot* bot, const applicationConfig* aConfig, int64_t chatId) {
+    if (!l || !bot || !aConfig) {
+        return;
+
+    }
+
+    try {
+        TgBot::InlineKeyboardMarkup::Ptr iKeyboardM = buildJoinPromptKeyboard(l, bot, aConfig, chatId);
+
+        bot->getApi().sendMessage(chatId, aConfig->aMessages->channelJoinMessage, nullptr, nullptr, iKeyboardM);
+
+    } catch (TgBot::TgException& e) {
+        std::string errMsg = "Failed to send join-channel message to user: " + std::string(e.what());
+        l->logMsg(iLog::logLevel::ERROR, LOG_FUNC, errMsg.c_str());
+
+    } catch (...) {
+        l->logMsg(iLog::logLevel::ERROR, LOG_FUNC, "Failed to send join-channel message to user");
+
+    }
+
+}
 
 void iBot::updateUserInfoFromMessage(TgBot::Message::Ptr messagePtr) {
     if (!l || !uInfo || !messagePtr) {
@@ -462,7 +662,7 @@ void getMessage2EditmsgHandler::handle(TgBot::Message::Ptr messagePtr) {
     int64_t extractedFromReplyMsgId = strtoll(msgIdStr, NULL, 10);
     free(msgIdStr);
 
-    TgBot::Message::Ptr forwardedMsg = forwardMessage(
+    TgBot::MessageId::Ptr copiedMsgIdPtr = bot->getApi().copyMessage(
             aConfig->privateChannelChatId,
             uInfo->userId,
             extractedFromReplyMsgId
@@ -508,7 +708,7 @@ void getMessage2EditmsgHandler::handle(TgBot::Message::Ptr messagePtr) {
         uploadDb->l = l;
 
         struct uploadInfo upInfo = {
-            .messageId = static_cast<int64_t>(forwardedMsg->messageId),
+            .messageId = static_cast<int64_t>(copiedMsgIdPtr->messageId),
             .secret = secret
         };
 
@@ -541,7 +741,7 @@ void getMessage2EditmsgHandler::handle(TgBot::Message::Ptr messagePtr) {
 
     try {
         bot->getApi().copyMessage(
-                uInfo->userId,
+                aConfig->editMsgTargetChannel,
                 uInfo->userId,
                 messagePtr->messageId,
                 "",
@@ -558,6 +758,16 @@ void getMessage2EditmsgHandler::handle(TgBot::Message::Ptr messagePtr) {
         free(deepLink);
 
         throw;
+
+    }
+
+    uInfo->cState = conversationState::LOGGED_IN;
+    {
+        iUserDatabaseSql* userDb = new userDatabaseSql();
+        userDb->l = l;
+        userDb->uInfo = uInfo;
+        userDb->writeUserData(iUserDatabaseSql::userDataRW::CONVERSATION_STATE);
+        delete userDb;
 
     }
 
@@ -637,6 +847,11 @@ unsigned char channelJoinMsgHandler::canHandle(TgBot::Message::Ptr messagePtr) {
 
 }
 
+void channelJoinMsgHandler::sendJoinChannelPrompt(int64_t chatId) {
+    sendJoinPrompt(l, bot, aConfig, chatId);
+
+}
+
 void channelJoinMsgHandler::handle(TgBot::Message::Ptr messagePtr) {
     if (!l || !messagePtr) {
 
@@ -646,45 +861,7 @@ void channelJoinMsgHandler::handle(TgBot::Message::Ptr messagePtr) {
 
     l->logMsg(iLog::logLevel::WARNING, LOG_FUNC, "Blocked message from user not in channel");
 
-    try {
-        TgBot::InlineKeyboardMarkup::Ptr iKeyboardM(new TgBot::InlineKeyboardMarkup);
-
-        if (aConfig->channels2JoinUrls) {
-            for (size_t i = 0; i < aConfig->channels2JoinUrls->size(); i++) {
-                std::vector<TgBot::InlineKeyboardButton::Ptr> row;
-
-                TgBot::InlineKeyboardButton::Ptr joinBtn(new TgBot::InlineKeyboardButton);
-                joinBtn->text = aConfig->channels2JoinUrls->at(i);
-                joinBtn->url = aConfig->channels2JoinUrls->at(i);
-                row.push_back(joinBtn);
-
-                iKeyboardM->inlineKeyboard.push_back(row);
-
-            }
-
-        }
-
-        std::vector<TgBot::InlineKeyboardButton::Ptr> confirmRow;
-
-        TgBot::InlineKeyboardButton::Ptr joinConfirmBtn(new TgBot::InlineKeyboardButton);
-        joinConfirmBtn->text = aConfig->aMessages->channelJoinConfirmText;
-        joinConfirmBtn->callbackData = "joinConfirm";
-        confirmRow.push_back(joinConfirmBtn);
-
-        iKeyboardM->inlineKeyboard.push_back(confirmRow);
-
-        sendMessage(
-                messagePtr->chat->id,
-                aConfig->aMessages->channelJoinMessage,
-                nullptr,
-                nullptr,
-                iKeyboardM
-        );
-
-    } catch (...) {
-        l->logMsg(iLog::logLevel::ERROR, LOG_FUNC, "Failed to send join-channel message to user");
-
-    }
+    sendJoinChannelPrompt(messagePtr->chat->id);
 
     l->logMsg(iLog::logLevel::INFO, LOG_FUNC, "channelJoinMsgHandler::handle complete");
 
@@ -753,39 +930,7 @@ void joinConfirmIKHandler::handle(TgBot::CallbackQuery::Ptr cBQueryPtr) {
 
             }
 
-            TgBot::InlineKeyboardMarkup::Ptr iKeyboardM(new TgBot::InlineKeyboardMarkup);
-
-            if (aConfig->channels2JoinUrls) {
-                for (size_t i = 0; i < aConfig->channels2JoinUrls->size(); i++) {
-                    std::vector<TgBot::InlineKeyboardButton::Ptr> row;
-
-                    TgBot::InlineKeyboardButton::Ptr joinBtn(new TgBot::InlineKeyboardButton);
-                    joinBtn->text = aConfig->channels2JoinUrls->at(i);
-                    joinBtn->url = aConfig->channels2JoinUrls->at(i);
-                    row.push_back(joinBtn);
-
-                    iKeyboardM->inlineKeyboard.push_back(row);
-
-                }
-
-            }
-
-            std::vector<TgBot::InlineKeyboardButton::Ptr> confirmRow;
-
-            TgBot::InlineKeyboardButton::Ptr joinConfirmBtn(new TgBot::InlineKeyboardButton);
-            joinConfirmBtn->text = aConfig->aMessages->channelJoinConfirmText;
-            joinConfirmBtn->callbackData = "joinConfirm";
-            confirmRow.push_back(joinConfirmBtn);
-
-            iKeyboardM->inlineKeyboard.push_back(confirmRow);
-
-            sendMessage(
-                    uInfo->userId,
-                    aConfig->aMessages->channelJoinMessage,
-                    nullptr,
-                    nullptr,
-                    iKeyboardM
-            );
+            sendJoinPrompt(l, bot, aConfig, uInfo->userId);
 
         }
 
@@ -793,46 +938,12 @@ void joinConfirmIKHandler::handle(TgBot::CallbackQuery::Ptr cBQueryPtr) {
         std::string errMsg = "getChatMember failed: " + std::string(e.what());
         l->logMsg(iLog::logLevel::ERROR, LOG_FUNC, errMsg.c_str());
 
-        TgBot::InlineKeyboardMarkup::Ptr iKeyboardM(new TgBot::InlineKeyboardMarkup);
-
-        std::vector<TgBot::InlineKeyboardButton::Ptr> confirmRow;
-
-        TgBot::InlineKeyboardButton::Ptr joinConfirmBtn(new TgBot::InlineKeyboardButton);
-        joinConfirmBtn->text = aConfig->aMessages->channelJoinConfirmText;
-        joinConfirmBtn->callbackData = "joinConfirm";
-        confirmRow.push_back(joinConfirmBtn);
-
-        iKeyboardM->inlineKeyboard.push_back(confirmRow);
-
-        sendMessage(
-                uInfo->userId,
-                aConfig->aMessages->channelJoinMessage,
-                nullptr,
-                nullptr,
-                iKeyboardM
-        );
+        sendJoinPrompt(l, bot, aConfig, uInfo->userId);
 
     } catch (...) {
         l->logMsg(iLog::logLevel::ERROR, LOG_FUNC, "getChatMember failed with unknown error");
 
-        TgBot::InlineKeyboardMarkup::Ptr iKeyboardM(new TgBot::InlineKeyboardMarkup);
-
-        std::vector<TgBot::InlineKeyboardButton::Ptr> confirmRow;
-
-        TgBot::InlineKeyboardButton::Ptr joinConfirmBtn(new TgBot::InlineKeyboardButton);
-        joinConfirmBtn->text = aConfig->aMessages->channelJoinConfirmText;
-        joinConfirmBtn->callbackData = "joinConfirm";
-        confirmRow.push_back(joinConfirmBtn);
-
-        iKeyboardM->inlineKeyboard.push_back(confirmRow);
-
-        sendMessage(
-                uInfo->userId,
-                aConfig->aMessages->channelJoinMessage,
-                nullptr,
-                nullptr,
-                iKeyboardM
-        );
+        sendJoinPrompt(l, bot, aConfig, uInfo->userId);
 
     }
 
@@ -840,38 +951,8 @@ void joinConfirmIKHandler::handle(TgBot::CallbackQuery::Ptr cBQueryPtr) {
 
 }
 
-unsigned char checkBotDbHandler::isUserInBotDb(const char* databasePath, int64_t userId) {
-    if (!databasePath) {
-        return 0;
-
-    }
-
-    sqlite3* db;
-    if (sqlite3_open(databasePath, &db) != SQLITE_OK) {
-        l->logMsg(iLog::logLevel::ERROR, LOG_FUNC, "Cannot open external bot database");
-
-        return 0;
-
-    }
-
-    const char* sql = "SELECT userId FROM users WHERE userId = ?";
-    sqlite3_stmt* stmt;
-    if (sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr) != SQLITE_OK) {
-        l->logMsg(iLog::logLevel::ERROR, LOG_FUNC, "Cannot prepare statement for external bot database");
-
-        sqlite3_close(db);
-        return 0;
-
-    }
-
-    sqlite3_bind_int64(stmt, 1, userId);
-
-    unsigned char found = (sqlite3_step(stmt) == SQLITE_ROW) ? 1 : 0;
-
-    sqlite3_finalize(stmt);
-    sqlite3_close(db);
-
-    return found;
+bool checkBotDbHandler::isUserInAllBots(int64_t userId) {
+    return isUserInAllBotsImpl(l, aConfig, userId);
 
 }
 
@@ -881,30 +962,57 @@ void checkBotDbHandler::handleAfterJoinConfirm(int64_t userId, int64_t chatId) {
 
     }
 
-    std::vector<std::pair<const char*, const char*>> missingBots;
+    iTargetBotDb* targetBotDb = new targetBotDbSql();
+    targetBotDb->l = l;
+
+    bool userInAllBots = true;
 
     for (size_t i = 0; i < aConfig->botDatabases->size(); i++) {
         struct botInfo& info = aConfig->botDatabases->at(i);
-        if (!isUserInBotDb(info.databasePath, userId)) {
-            missingBots.emplace_back(info.botName, info.databasePath);
+        iTargetBotDb::dbCheckResult result = targetBotDb->isUserInDb(info.databasePath, userId);
+
+        if (result == iTargetBotDb::dbCheckResult::DB_ERROR) {
+            std::string errMsg = "Fatal: cannot read database for bot '" + std::string(info.botName ? info.botName : "?") +
+                                 "', path may be incorrect in config: " + std::string(info.databasePath ? info.databasePath : "null");
+            l->logMsg(iLog::logLevel::ERROR, LOG_FUNC, errMsg.c_str());
+
+            delete targetBotDb;
+            std::raise(SIGINT);
+
+            return;
+
+        }
+
+        if (result == iTargetBotDb::dbCheckResult::NOT_FOUND) {
+            userInAllBots = false;
+
+            break;
 
         }
 
     }
 
-    TgBot::InlineKeyboardMarkup::Ptr iKeyboardM(new TgBot::InlineKeyboardMarkup);
+    delete targetBotDb;
 
-    for (size_t i = 0; i < missingBots.size(); i++) {
-        std::vector<TgBot::InlineKeyboardButton::Ptr> row;
+    if (!userInAllBots) {
+        if (joinHandler) {
+            joinHandler->sendJoinChannelPrompt(chatId);
 
-        TgBot::InlineKeyboardButton::Ptr botBtn(new TgBot::InlineKeyboardButton);
-        std::string btnText = "Start " + std::string(missingBots[i].first);
-        std::string btnUrl = "https://t.me/" + std::string(missingBots[i].first);
-        botBtn->text = btnText;
-        botBtn->url = btnUrl;
-        row.push_back(botBtn);
+        } else {
+            sendMessage(
+                    chatId,
+                    aConfig->aMessages->channelJoinSuccessMessage,
+                    nullptr,
+                    nullptr,
+                    nullptr
+            );
 
-        iKeyboardM->inlineKeyboard.push_back(row);
+        }
+
+        l->logMsg(iLog::logLevel::WARNING, LOG_FUNC,
+            "checkBotDbHandler::handleAfterJoinConfirm: user missing from target bots, re-showing join prompt");
+
+        return;
 
     }
 
@@ -913,7 +1021,7 @@ void checkBotDbHandler::handleAfterJoinConfirm(int64_t userId, int64_t chatId) {
             aConfig->aMessages->channelJoinSuccessMessage,
             nullptr,
             nullptr,
-            missingBots.empty() ? nullptr : iKeyboardM
+            nullptr
     );
 
     l->logMsg(iLog::logLevel::INFO, LOG_FUNC, "checkBotDbHandler::handleAfterJoinConfirm complete");
